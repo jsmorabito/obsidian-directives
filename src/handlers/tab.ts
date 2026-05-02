@@ -57,6 +57,7 @@ import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
 import { eventBusField } from '../core/event-bus'
 import type { EventBus } from '../core/event-bus'
+import type { DirectivesSettings } from '../settings'
 
 // ---------------------------------------------------------------------------
 // TabWidget
@@ -78,10 +79,11 @@ class TabWidget extends DirectiveWidget {
   constructor(
     private readonly directive: ParsedDirective,
     private readonly bus: EventBus,
+    private readonly settings: Pick<DirectivesSettings, 'defaultBpm' | 'defaultCpb'>,
   ) {
     super()
-    this.bpm = Math.max(20, parseInt(directive.attributes['bpm'] ?? '120', 10) || 120)
-    this.cpb = Math.max(1,  parseInt(directive.attributes['cpb'] ?? '2',   10) || 2)
+    this.bpm = Math.max(20, parseInt(directive.attributes['bpm'] ?? '', 10) || settings.defaultBpm)
+    this.cpb = Math.max(1,  parseInt(directive.attributes['cpb'] ?? '', 10) || settings.defaultCpb)
   }
 
   eq(other: TabWidget): boolean {
@@ -331,15 +333,17 @@ class TabWidget extends DirectiveWidget {
 
 /**
  * Create the tab directive handler.
- * Call once in plugin onload() and register via plugin.addHandler().
+ * Pass the live settings object — changes take effect on next widget render.
  */
-export function createTabHandler(): DirectiveHandler {
+export function createTabHandler(
+  settings: Pick<DirectivesSettings, 'defaultBpm' | 'defaultCpb'>,
+): DirectiveHandler {
   return {
     name: 'tab',
 
     render(directive: ParsedDirective, state: EditorState): DirectiveWidget {
       const bus = state.field(eventBusField)
-      return new TabWidget(directive, bus)
+      return new TabWidget(directive, bus, settings)
     },
   }
 }

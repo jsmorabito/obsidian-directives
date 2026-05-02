@@ -42,6 +42,7 @@ import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
 import { eventBusField } from '../core/event-bus'
 import type { EventBus } from '../core/event-bus'
+import type { DirectivesSettings } from '../settings'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -345,6 +346,7 @@ class ChordWidget extends DirectiveWidget {
   constructor(
     private readonly directive: ParsedDirective,
     private readonly bus: EventBus,
+    private readonly settings: Pick<DirectivesSettings, 'defaultChordLayout'>,
   ) {
     super()
   }
@@ -360,7 +362,7 @@ class ChordWidget extends DirectiveWidget {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const layout   = (this.directive.attributes['layout'] ?? 'grid') as Layout
+    const layout   = (this.directive.attributes['layout'] ?? this.settings.defaultChordLayout) as Layout
     const audioSrc = this.directive.attributes['audio']
     const entries  = parseChordEntries(this.directive.body ?? '')
 
@@ -500,15 +502,17 @@ class ChordWidget extends DirectiveWidget {
 
 /**
  * Create the chords directive handler.
- * Call once in plugin onload() and register via plugin.addHandler().
+ * Pass the live settings object — changes take effect on next widget render.
  */
-export function createChordsHandler(): DirectiveHandler {
+export function createChordsHandler(
+  settings: Pick<DirectivesSettings, 'defaultChordLayout'>,
+): DirectiveHandler {
   return {
     name: 'chords',
 
     render(directive: ParsedDirective, state: EditorState): DirectiveWidget {
       const bus = state.field(eventBusField)
-      return new ChordWidget(directive, bus)
+      return new ChordWidget(directive, bus, settings)
     },
   }
 }
