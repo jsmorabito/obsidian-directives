@@ -167,6 +167,18 @@
   white-space: pre;
   position: relative;
   line-height: 1.6;
+  padding-top: 2px; /* room for playhead top edge */
+}
+
+/* Reset any theme-injected margins on the <pre> inside the tab display */
+.directive-tab-pre {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  background: none;
+  border: none;
 }
 
 .directive-tab-playhead {
@@ -308,4 +320,51 @@
 .directive-chord-svg {
   display: block;
   overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   YouTube widget
+   -------------------------------------------------------------------------- */
+
+/* Remove default widget padding so the video is flush with the card edges */
+.directive-widget--youtube {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Error state inside the youtube widget needs its own padding */
+.directive-widget--youtube-error {
+  padding: 12px;
+}
+
+.directive-youtube-header {
+  padding: 8px 12px;
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* Responsive 16:9 container using the padding-bottom trick */
+.directive-youtube-embed {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16 : 9 */
+  height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.directive-youtube-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.directive-youtube-timestamps {
+  padding: 4px 12px 8px;
+  border-top: 1px solid var(--background-modifier-border);
 }
