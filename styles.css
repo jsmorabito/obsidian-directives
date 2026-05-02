@@ -283,3 +283,29 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }
+
+.directive-chords-header {
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  margin-bottom: 8px;
+  font-size: var(--font-ui-small);
+}
+
+/* Placeholder for chords not found in the built-in database */
+.directive-chord-unknown {
+  width: 80px;
+  height: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-ui-larger);
+  color: var(--text-faint);
+  background: var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+/* Ensure SVG diagrams don't pick up unintended inherited styles */
+.directive-chord-svg {
+  display: block;
+  overflow: visible;
+}

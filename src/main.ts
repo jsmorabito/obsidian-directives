@@ -2,6 +2,7 @@ import { Plugin } from 'obsidian'
 import { DirectiveRegistry } from './core/registry'
 import { createDirectiveExtension } from './core/decoration-engine'
 import { createAudioHandler, disposeAllAudio } from './handlers/audio'
+import { createChordsHandler } from './handlers/chords'
 import type { DirectiveHandler } from './types'
 
 export default class ObsidianDirectivesPlugin extends Plugin {
@@ -13,6 +14,7 @@ export default class ObsidianDirectivesPlugin extends Plugin {
     // Built-in handlers — registered in spec build order (§10.8):
     //   audio → chords → tab → youtube
     this.addHandler(createAudioHandler(this.app))
+    this.addHandler(createChordsHandler())
 
     this.registerEditorExtension(createDirectiveExtension(this.registry))
   }

@@ -127,6 +127,9 @@ export function disposeAllAudio(): void {
 class AudioWidget extends DirectiveWidget {
   // Event listener cleanup fns — populated in toDOM(), called in destroy().
   private cleanups: Array<() => void> = []
+  // Prevents the 'seeked' event from re-publishing audio:seek when the seek
+  // originated from the bus (e.g. a chord card click).
+  private seekingFromBus = false
 
   constructor(
     private readonly directive: ParsedDirective,
@@ -174,6 +177,16 @@ class AudioWidget extends DirectiveWidget {
 
     wrap.appendChild(this.buildTransport(audio, src, timestamps, wrap))
     wrap.appendChild(this.buildTimestampList(audio, src, timestamps))
+
+    // Respond to audio:seek published by other widgets (e.g. chord card clicks).
+    // The seekingFromBus flag prevents the resulting 'seeked' event from
+    // re-publishing audio:seek and creating a loop.
+    const unsubSeek = this.bus.subscribe('audio:seek', ({ src: seekSrc, time }) => {
+      if (seekSrc !== src) return
+      this.seekingFromBus = true
+      audio.currentTime = time
+    })
+    this.cleanups.push(unsubSeek)
 
     return wrap
   }
@@ -368,6 +381,11 @@ class AudioWidget extends DirectiveWidget {
     }
 
     const onSeeked = (): void => {
+      if (this.seekingFromBus) {
+        // Seek came from the bus (e.g. chord card click) — don't re-publish.
+        this.seekingFromBus = false
+        return
+      }
       this.bus.publish('audio:seek', { src, time: audio.currentTime })
     }
 
