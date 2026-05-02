@@ -1,36 +1,16 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
-import MyPlugin from "./main";
+/**
+ * settings.ts
+ *
+ * Plugin settings for Obsidian Directives.
+ * No configurable settings in v1 — this file is a placeholder for future
+ * settings (e.g. theme overrides, chord library options, BPM defaults).
+ */
 
-export interface MyPluginSettings {
-	mySetting: string;
+export interface DirectivesSettings {
+  // Reserved for future settings.
+  _version: number
 }
 
-export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
-
-export class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+export const DEFAULT_SETTINGS: DirectivesSettings = {
+  _version: 1,
 }

@@ -1,8 +1,285 @@
-/*
+/* ==========================================================================
+   Obsidian Directives — base widget styles
+   All values reference Obsidian CSS variables so widgets inherit the
+   user's active theme automatically. No hardcoded colors.
+   ========================================================================== */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* --------------------------------------------------------------------------
+   Shared widget shell
+   -------------------------------------------------------------------------- */
 
-If your plugin does not need CSS, delete this file.
+.directive-widget {
+  display: block;
+  padding: 12px;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  box-sizing: border-box;
+  margin-block: 4px;
+  /* No drop shadow — keeps visual weight consistent with Obsidian's flat aesthetic */
+}
 
-*/
+/* --------------------------------------------------------------------------
+   Fallback widget (unrecognized directive name)
+   -------------------------------------------------------------------------- */
+
+.directive-widget--fallback {
+  border-left: 3px solid var(--text-muted);
+  opacity: 0.8;
+}
+
+.directive-widget__name {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.directive-widget__body {
+  white-space: pre-wrap;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* --------------------------------------------------------------------------
+   Active / highlighted row (shared across audio timestamps, youtube-notes)
+   -------------------------------------------------------------------------- */
+
+.directive-row--active {
+  border-left: 3px solid var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  padding-left: 9px; /* compensate for 3px border so text stays aligned */
+}
+
+/* --------------------------------------------------------------------------
+   Timestamp rows (audio and youtube-notes)
+   -------------------------------------------------------------------------- */
+
+.directive-timestamp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 28px;
+  padding: 0 4px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 80ms ease;
+}
+
+.directive-timestamp-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.directive-timestamp {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 3.5ch;
+}
+
+.directive-timestamp-label {
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   Transport bar (shared across audio and tab widgets)
+   -------------------------------------------------------------------------- */
+
+.directive-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.directive-transport__play-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-normal);
+  padding: 4px;
+  border-radius: var(--radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.directive-transport__play-btn:hover {
+  background: var(--background-modifier-hover);
+}
+
+.directive-transport__scrubber {
+  flex: 1;
+  height: 4px;
+  appearance: none;
+  background: var(--background-modifier-border);
+  border-radius: 2px;
+  cursor: pointer;
+  accent-color: var(--interactive-accent);
+}
+
+.directive-transport__time {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Error state (shared)
+   -------------------------------------------------------------------------- */
+
+.directive-widget--error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-error);
+  height: 40px;
+}
+
+.directive-widget--error .directive-error-icon {
+  flex-shrink: 0;
+}
+
+.directive-widget--error .directive-error-msg {
+  font-size: var(--font-ui-small);
+}
+
+/* --------------------------------------------------------------------------
+   Tab widget — monospace tab display
+   -------------------------------------------------------------------------- */
+
+.directive-tab-display {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  overflow-x: auto;
+  white-space: pre;
+  position: relative;
+  line-height: 1.6;
+}
+
+.directive-tab-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.directive-tab-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.directive-tab-label {
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  margin-right: auto;
+}
+
+.directive-bpm-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.directive-bpm-control input[type="number"] {
+  width: 3.5ch;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  text-align: right;
+  padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Chord widget
+   -------------------------------------------------------------------------- */
+
+.directive-chords-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.directive-chords-horizontal {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.directive-chords-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.directive-chords-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-ui-medium);
+}
+
+.directive-chord-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  padding: 4px;
+  border: 2px solid transparent;
+  transition: border-color 80ms ease;
+}
+
+.directive-chord-card:hover {
+  background: var(--background-modifier-hover);
+}
+
+.directive-chord-card--active {
+  border-color: var(--interactive-accent);
+}
+
+.directive-chord-name {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.directive-chord-card--active .directive-chord-name {
+  color: var(--interactive-accent);
+}
+
+.directive-chord-timestamp {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
