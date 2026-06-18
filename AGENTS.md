@@ -35,10 +35,9 @@ npm run build
 
 ## Linting
 
-- To use eslint install eslint from terminal: `npm install -g eslint`
-- To use eslint to analyze this project use this command: `eslint main.ts`
-- eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder: `eslint ./src/`
+- ESLint is preconfigured with `eslint-plugin-obsidianmd` for Obsidian-specific rules.
+- Run `npm run lint` to lint the project.
+- A GitHub Action automatically lints every commit on all branches.
 
 ## File & folder conventions
 

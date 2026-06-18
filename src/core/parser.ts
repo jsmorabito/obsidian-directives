@@ -220,7 +220,7 @@ export function parseAttributes(raw: string): Record<string, string> {
 
   // Each branch of the alternation is mutually exclusive.
   const TOKEN_RE =
-    /([a-zA-Z][\w\-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))|#([\w\-]+)|\.([a-zA-Z][\w\-]*)|([a-zA-Z][\w\-]*)/g
+    /([a-zA-Z][\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))|#([\w-]+)|\.([a-zA-Z][\w-]*)|([a-zA-Z][\w-]*)/g
 
   let m: RegExpExecArray | null
   while ((m = TOKEN_RE.exec(raw)) !== null) {

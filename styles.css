@@ -66,7 +66,7 @@
   padding: 0 4px;
   cursor: pointer;
   border-left: 3px solid transparent;
-  transition: background 80ms ease;
+  transition: background var(--anim-duration-fast) var(--anim-motion-smooth);
 }
 
 .directive-timestamp-row:hover {
@@ -367,4 +367,232 @@
 .directive-youtube-timestamps {
   padding: 4px 12px 8px;
   border-top: 1px solid var(--background-modifier-border);
+}
+
+/* --------------------------------------------------------------------------
+   Log widget
+   -------------------------------------------------------------------------- */
+
+.directive-widget--log {
+  padding: 0;
+  overflow: hidden;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.directive-log-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.directive-log-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.directive-log-btn-group {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  margin-left: auto;
+}
+
+.directive-log-new-btn {
+  background: var(--interactive-normal);
+  border: none;
+  border-radius: var(--button-radius, var(--radius-s));
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-family: var(--font-interface);
+  padding: var(--size-2-3, 4px) var(--size-4-3, 12px);
+  cursor: pointer;
+  transition: background var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.directive-log-new-btn:hover {
+  background: var(--interactive-hover);
+}
+
+/* Higher specificity needed to override Obsidian's global button background reset */
+.directive-widget--log .directive-log-cal-btn {
+  background: transparent;
+  border: none;
+  border-radius: var(--clickable-icon-radius, var(--radius-s));
+  padding: var(--icon-s, 4px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-color);
+  transition: background var(--anim-duration-fast) var(--anim-motion-smooth),
+              color var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.directive-widget--log .directive-log-cal-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--icon-color-hover);
+}
+
+.directive-log-cal-btn svg {
+  width: var(--icon-size, 16px);
+  height: var(--icon-size, 16px);
+}
+
+/* Absolutely positioned within .directive-log-header (position: relative).
+   !important overrides Obsidian's global input position reset so this element
+   never participates in the header's flex layout. */
+.directive-log-date-input {
+  position: absolute !important;
+  top: 0;
+  right: 12px;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
+  padding: 0;
+}
+
+.directive-log-entries {
+  padding: 4px 0 8px;
+}
+
+.directive-log-empty {
+  padding: 12px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+  font-style: italic;
+}
+
+.directive-log-entry {
+  padding: 8px 12px 4px;
+}
+
+.directive-log-entry + .directive-log-entry {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.directive-log-date {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--interactive-accent);
+  margin-bottom: 4px;
+}
+
+.directive-log-content {
+  margin: 0;
+  padding-left: var(--list-indent);
+  list-style: disc;
+}
+
+.directive-log-content ::marker {
+  color: var(--list-marker-color);
+}
+
+.directive-log-content .directive-log-content {
+  list-style: circle;
+}
+
+.directive-log-item {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  line-height: var(--line-height-normal);
+  padding: 1px 0;
+}
+
+/* --------------------------------------------------------------------------
+   Add-to-log command modals
+   -------------------------------------------------------------------------- */
+
+.add-to-log-desc {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  margin-bottom: var(--size-4-3);
+}
+
+.add-to-log-field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-2);
+}
+
+.add-to-log-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.add-to-log-date-native,
+.add-to-log-note-input {
+  flex: 1;
+  font-size: var(--font-ui-small);
+  font-family: var(--font-interface);
+  color: var(--text-normal);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: var(--size-2-3) var(--size-4-2);
+}
+
+.add-to-log-btn-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--size-4-3);
+}
+
+.add-to-log-suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
+
+.add-to-log-suggestion-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+}
+
+.add-to-log-suggestion-icon svg {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
+
+/* --------------------------------------------------------------------------
+   Directive autocomplete suggestion rows
+   -------------------------------------------------------------------------- */
+
+.directive-suggest-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.directive-suggest-colons {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.directive-suggest-name {
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+
+.directive-chords-clickable {
+  cursor: pointer;
+}
+
+.directive-tab-synced {
+  opacity: 0.45;
 }

@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian'
+import { Plugin, TFile } from 'obsidian'
 import { DirectiveRegistry } from './core/registry'
 import { createDirectiveExtension } from './core/decoration-engine'
 import { eventBusField } from './core/event-bus'
@@ -6,7 +6,10 @@ import { createAudioHandler, disposeAllAudio } from './handlers/audio'
 import { createChordsHandler } from './handlers/chords'
 import { createTabHandler } from './handlers/tab'
 import { createYouTubeHandler } from './handlers/youtube'
+import { createLogHandler } from './handlers/log'
 import { DirectivesSettingTab } from './ui/settings-tab'
+import { DirectiveSuggest } from './ui/directive-suggest'
+import { AddToLogModal } from './ui/add-to-log-modal'
 import { DEFAULT_SETTINGS } from './settings'
 import type { DirectivesSettings } from './settings'
 import type { DirectiveHandler } from './types'
@@ -17,7 +20,7 @@ import type { ObsidianDirectivesAPI } from './api'
 export const API_VERSION = '1.0.0'
 
 /** Directive names claimed by built-in handlers. */
-const BUILTIN_NAMES = new Set(['audio', 'chords', 'tab', 'youtube'])
+const BUILTIN_NAMES = new Set(['audio', 'chords', 'tab', 'youtube', 'log'])
 
 /** Pattern a valid directive name must match. */
 const VALID_NAME = /^[a-z][a-z0-9-]*$/
@@ -43,7 +46,7 @@ export default class ObsidianDirectivesPlugin extends Plugin
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<DirectivesSettings>)
 
     this.registry = new DirectiveRegistry()
 
@@ -52,8 +55,30 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.addHandler(createChordsHandler(this.settings))
     this.addHandler(createTabHandler(this.settings))
     this.addHandler(createYouTubeHandler())
+    this.addHandler(createLogHandler(this.app, this.settings))
 
     this.registerEditorExtension(createDirectiveExtension(this.registry))
+    this.registerEditorSuggest(new DirectiveSuggest(this.app, this.registry))
+
+    this.addCommand({
+      id: 'add-to-log',
+      name: 'Add to log',
+      callback: async () => {
+        // Scan all vault files for :::log blocks before opening the modal so
+        // getItems() has the complete filtered list from the start.
+        const allFiles = this.app.vault.getMarkdownFiles()
+        const logFiles = (
+          await Promise.all(
+            allFiles.map(async f => {
+              const text = await this.app.vault.cachedRead(f)
+              return /^:::log/m.test(text) ? f : null
+            }),
+          )
+        ).filter((f): f is TFile => f !== null)
+
+        new AddToLogModal(this.app, this.settings, logFiles).open()
+      },
+    })
     this.addSettingTab(new DirectivesSettingTab(this.app, this))
   }
 

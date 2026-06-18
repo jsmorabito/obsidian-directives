@@ -36,7 +36,7 @@ export class EventBus {
     event: K,
     payload: DirectiveEventPayload<K>,
   ): void {
-    const cbs = this.listeners.get(event as string)
+    const cbs = this.listeners.get(event)
     if (!cbs) return
     for (const cb of cbs) {
       try {
@@ -60,13 +60,13 @@ export class EventBus {
     event: K,
     callback: (payload: DirectiveEventPayload<K>) => void,
   ): () => void {
-    const key = event as string
+    const key = event
     let cbs = this.listeners.get(key)
     if (!cbs) {
       cbs = new Set()
       this.listeners.set(key, cbs)
     }
-    const cb = callback as AnyCallback
+    const cb = callback
     cbs.add(cb)
 
     return () => {
@@ -78,7 +78,7 @@ export class EventBus {
    * Remove all listeners for a specific event. Useful for teardown.
    */
   clearEvent(event: DirectiveEventName): void {
-    this.listeners.delete(event as string)
+    this.listeners.delete(event)
   }
 
   /**

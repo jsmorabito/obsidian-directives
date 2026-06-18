@@ -20,11 +20,106 @@ export class DirectivesSettingTab extends PluginSettingTab {
     const { containerEl } = this
     containerEl.empty()
 
-    // ── Tab directive ──────────────────────────────────────────────────────
+    // ── Log directive ──────────────────────────────────────────────────────
 
-    containerEl.createEl('h3', { text: 'Tab directive' })
+    new Setting(containerEl).setName("Log directive").setHeading()
 
     new Setting(containerEl)
+      .setName('Date heading level')
+      .setDesc(
+        'Render each date entry as a Markdown heading so it appears in ' +
+        "Obsidian's Outline panel. Choose \"List item\" to keep the original " +
+        'bullet-point style (no outline entry).',
+      )
+      .addDropdown(drop =>
+        drop
+          .addOption('0', 'List item  (- date)')
+          .addOption('1', 'H1  (#)')
+          .addOption('2', 'H2  (##)')
+          .addOption('3', 'H3  (###)')
+          .addOption('4', 'H4  (####)')
+          .addOption('5', 'H5  (#####)')
+          .addOption('6', 'H6  (######)')
+          .setValue(String(this.plugin.settings.logDateHeadingLevel))
+          .onChange(async value => {
+            this.plugin.settings.logDateHeadingLevel =
+              Number(value) as typeof this.plugin.settings.logDateHeadingLevel
+            await this.plugin.saveSettings()
+          }),
+      )
+
+    new Setting(containerEl)
+      .setName('Title heading level')
+      .setDesc(
+        'Insert a Markdown heading for "Log" at the top of the directive body ' +
+        "so it appears in Obsidian's Outline panel. " +
+        'Only applied when a new :::log block is created via autocomplete. ' +
+        'Choose "None" to skip the heading.',
+      )
+      .addDropdown(drop =>
+        drop
+          .addOption('0', 'None')
+          .addOption('1', 'H1  (#)')
+          .addOption('2', 'H2  (##)')
+          .addOption('3', 'H3  (###)')
+          .addOption('4', 'H4  (####)')
+          .addOption('5', 'H5  (#####)')
+          .addOption('6', 'H6  (######)')
+          .setValue(String(this.plugin.settings.logTitleHeadingLevel))
+          .onChange(async value => {
+            this.plugin.settings.logTitleHeadingLevel =
+              Number(value) as typeof this.plugin.settings.logTitleHeadingLevel
+            await this.plugin.saveSettings()
+          }),
+      )
+
+    let formatSetting: Setting
+
+    new Setting(containerEl)
+      .setName('Date style')
+      .setDesc('How dates are displayed in :::log widgets.')
+      .addDropdown(drop =>
+        drop
+          .addOption('plain',    'Plain text — 2026-06-17')
+          .addOption('wikilink', 'Wikilink — [[2026-06-17]]')
+          .setValue(this.plugin.settings.logDateStyle)
+          .onChange(async value => {
+            this.plugin.settings.logDateStyle =
+              value as typeof this.plugin.settings.logDateStyle
+            await this.plugin.saveSettings()
+            // Show/hide the format row depending on the chosen style.
+            formatSetting.settingEl.toggle(value === 'wikilink')
+          }),
+      )
+
+    formatSetting = new Setting(containerEl)
+      .setName('Wikilink format')
+      .setDesc(
+        'Path template for the wikilink target. ' +
+        '{{date}} is replaced with the entry date (YYYY-MM-DD). ' +
+        'Example: "Daily/{{date}}" produces [[Daily/2026-06-17]].',
+      )
+      .addText(text =>
+        text
+          .setPlaceholder('{{date}}')
+          .setValue(this.plugin.settings.logDateFormat)
+          .onChange(async value => {
+            this.plugin.settings.logDateFormat = value || '{{date}}'
+            await this.plugin.saveSettings()
+          }),
+      )
+
+    // Show the format row only when wikilink style is active.
+    formatSetting.settingEl.toggle(
+      this.plugin.settings.logDateStyle === 'wikilink',
+    )
+
+    // ── Tab directive ──────────────────────────────────────────────────────
+
+    new Setting(containerEl).setName("Tab directive").setHeading()
+
+    new Setting(containerEl)
+      // eslint-disable-next-line obsidianmd/ui/sentence-case
       .setName('Default BPM')
       .setDesc(
         'Beats per minute used when a :::tab block does not include a bpm= attribute. ' +
@@ -61,7 +156,7 @@ export class DirectivesSettingTab extends PluginSettingTab {
 
     // ── Chords directive ───────────────────────────────────────────────────
 
-    containerEl.createEl('h3', { text: 'Chords directive' })
+    new Setting(containerEl).setName("Chords directive").setHeading()
 
     new Setting(containerEl)
       .setName('Default layout')

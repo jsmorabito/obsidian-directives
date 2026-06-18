@@ -122,7 +122,7 @@ class YouTubeWidget extends DirectiveWidget {
     const start      = parseInt(this.directive.attributes['start'] ?? '0', 10) || 0
     const timestamps = parseTimestamps(this.directive.body ?? '')
 
-    const wrap = document.createElement('div')
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--youtube'
 
     // Required: click-to-edit
@@ -141,7 +141,7 @@ class YouTubeWidget extends DirectiveWidget {
 
     // Optional header label
     if (this.directive.label) {
-      const header = document.createElement('div')
+      const header = activeDocument.createElement('div')
       header.className   = 'directive-youtube-header'
       header.textContent = this.directive.label
       wrap.appendChild(header)
@@ -149,7 +149,7 @@ class YouTubeWidget extends DirectiveWidget {
 
     // 16:9 responsive iframe wrapper
     const iframe = this.buildIframe(vid, start)
-    const embedWrap = document.createElement('div')
+    const embedWrap = activeDocument.createElement('div')
     embedWrap.className = 'directive-youtube-embed'
     embedWrap.appendChild(iframe)
     // Stop iframe interactions from bubbling to the cursor-move handler.
@@ -177,7 +177,7 @@ class YouTubeWidget extends DirectiveWidget {
     })
     if (start > 0) params.set('start', String(start))
 
-    const iframe           = document.createElement('iframe')
+    const iframe           = activeDocument.createElement('iframe')
     iframe.src             = `https://www.youtube.com/embed/${vid}?${params}`
     iframe.className       = 'directive-youtube-iframe'
     iframe.allow           = [
@@ -199,7 +199,7 @@ class YouTubeWidget extends DirectiveWidget {
     vid: string,
     iframe: HTMLIFrameElement,
   ): HTMLElement {
-    const list = document.createElement('div')
+    const list = activeDocument.createElement('div')
     list.className = 'directive-youtube-timestamps'
 
     const rowEls: HTMLElement[] = []
@@ -209,14 +209,14 @@ class YouTubeWidget extends DirectiveWidget {
       const entry = timestamps[i]
       if (!entry) continue
 
-      const row = document.createElement('div')
+      const row = activeDocument.createElement('div')
       row.className = 'directive-timestamp-row'
 
-      const tsEl = document.createElement('span')
+      const tsEl = activeDocument.createElement('span')
       tsEl.className   = 'directive-timestamp'
       tsEl.textContent = entry.raw
 
-      const lblEl = document.createElement('span')
+      const lblEl = activeDocument.createElement('span')
       lblEl.className   = 'directive-timestamp-label'
       lblEl.textContent = entry.label
 
@@ -250,7 +250,7 @@ class YouTubeWidget extends DirectiveWidget {
   // ── postMessage ↔ event bus ────────────────────────────────────────────
 
   private wirePostMessage(vid: string, iframe: HTMLIFrameElement): void {
-    let pollId: ReturnType<typeof setInterval> | null = null
+    let pollId: number | null = null
 
     const send = (func: string, args: unknown = ''): void => {
       iframe.contentWindow?.postMessage(
@@ -261,11 +261,11 @@ class YouTubeWidget extends DirectiveWidget {
 
     const startPolling = (): void => {
       if (pollId !== null) return
-      pollId = setInterval(() => send('getCurrentTime'), 250)
+      pollId = window.setInterval(() => send('getCurrentTime'), 250)
     }
 
     const stopPolling = (): void => {
-      if (pollId !== null) { clearInterval(pollId); pollId = null }
+      if (pollId !== null) { window.clearInterval(pollId); pollId = null }
     }
 
     const onMessage = (e: MessageEvent): void => {
@@ -274,7 +274,7 @@ class YouTubeWidget extends DirectiveWidget {
 
       let data: Record<string, unknown>
       try {
-        data = JSON.parse(typeof e.data === 'string' ? e.data : JSON.stringify(e.data))
+        data = JSON.parse(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)) as Record<string, unknown>
       } catch {
         return
       }
@@ -320,14 +320,14 @@ class YouTubeWidget extends DirectiveWidget {
   // ── Error state ────────────────────────────────────────────────────────
 
   private buildError(raw: string): HTMLElement {
-    const row = document.createElement('div')
+    const row = activeDocument.createElement('div')
     row.className = 'directive-widget--error'
 
-    const icon = document.createElement('span')
+    const icon = activeDocument.createElement('span')
     icon.className   = 'directive-error-icon'
     icon.textContent = '⚠'
 
-    const msg = document.createElement('span')
+    const msg = activeDocument.createElement('span')
     msg.className   = 'directive-error-msg'
     msg.textContent = raw.trim()
       ? `Could not parse YouTube video ID: "${raw}"`

@@ -24,7 +24,7 @@
  *  - Chord definitions store absolute fret numbers.  The renderer converts
  *    them to visual rows using:  visualRow = fret − baseFret + 1  (1-indexed).
  *
- *  - The SVG is created with document.createElementNS so CSS variables
+ *  - The SVG is created with activeDocument.createElementNS so CSS variables
  *    (var(--interactive-accent), etc.) resolve correctly in the live DOM.
  *
  *  - ChordWidget subscribes to audio:timeupdate to highlight the active chord
@@ -196,7 +196,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
 type SvgAttrs = Record<string, string | number>
 
 function svgEl(tag: string, attrs: SvgAttrs): Element {
-  const el = document.createElementNS(SVG_NS, tag)
+  const el = activeDocument.createElementNS(SVG_NS, tag)
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v))
   return el
 }
@@ -243,7 +243,7 @@ function renderChordSVG(def: ChordDef): Element {
   if (base > 1) {
     const lbl = svgEl('text', {
       x: S_XS[5] + 4,
-      y: DOT_YS[0]!,
+      y: DOT_YS[0],
       'font-size': 8,
       fill: 'var(--text-muted)',
       'dominant-baseline': 'middle',
@@ -366,7 +366,7 @@ class ChordWidget extends DirectiveWidget {
     const audioSrc = this.directive.attributes['audio']
     const entries  = parseChordEntries(this.directive.body ?? '')
 
-    const wrap = document.createElement('div')
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--chords'
 
     // Required: click anywhere on the widget puts cursor inside the block,
@@ -379,14 +379,14 @@ class ChordWidget extends DirectiveWidget {
 
     // Optional title label
     if (this.directive.label) {
-      const header = document.createElement('div')
+      const header = activeDocument.createElement('div')
       header.className = 'directive-chords-header'
       header.textContent = this.directive.label
       wrap.appendChild(header)
     }
 
     // Chord grid / row / column / text container
-    const container = document.createElement('div')
+    const container = activeDocument.createElement('div')
     container.className = this.layoutClass(layout)
     wrap.appendChild(container)
 
@@ -439,7 +439,7 @@ class ChordWidget extends DirectiveWidget {
     audioSrc: string | undefined,
     layout: Layout,
   ): HTMLElement {
-    const card = document.createElement('div')
+    const card = activeDocument.createElement('div')
     card.className = 'directive-chord-card'
     card.title     = entry.name
 
@@ -452,7 +452,7 @@ class ChordWidget extends DirectiveWidget {
           time: entry.time!,
         })
       })
-      card.style.cursor = 'pointer'
+      card.classList.add('directive-chords-clickable')
     }
 
     // SVG fretboard diagram (all layouts except text)
@@ -466,14 +466,14 @@ class ChordWidget extends DirectiveWidget {
     }
 
     // Chord name
-    const nameEl = document.createElement('span')
+    const nameEl = activeDocument.createElement('span')
     nameEl.className   = 'directive-chord-name'
     nameEl.textContent = entry.name
     card.appendChild(nameEl)
 
     // Timestamp badge
     if (entry.raw) {
-      const ts = document.createElement('span')
+      const ts = activeDocument.createElement('span')
       ts.className   = 'directive-chord-timestamp'
       ts.textContent = entry.raw
       card.appendChild(ts)
@@ -484,7 +484,7 @@ class ChordWidget extends DirectiveWidget {
 
   /** Placeholder shown for chords not found in the built-in database. */
   private buildUnknownPlaceholder(): HTMLElement {
-    const el = document.createElement('div')
+    const el = activeDocument.createElement('div')
     el.className = 'directive-chord-unknown'
     el.textContent = '?'
     return el

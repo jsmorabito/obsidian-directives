@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "obsidian-directives",
+	"version": "0.2.0",
+	"description": "Composable, interactive directive blocks for the live editor — audio players, YouTube embeds, chord charts, and guitar tabs.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -14,19 +14,18 @@
 	"license": "0-BSD",
 	"devDependencies": {
 		"@codemirror/language": "^6.12.3",
-		"@codemirror/state": "^6.6.0",
-		"@codemirror/view": "^6.41.1",
-		"@eslint/js": "9.30.1",
-		"@types/node": "^16.11.6",
+		"@codemirror/state": "6.5.0",
+		"@codemirror/view": "6.38.6",
+		"@eslint/js": "^9.39.4",
+		"@types/node": "^22.15.17",
 		"esbuild": "0.25.5",
-		"eslint-plugin-obsidianmd": "0.1.9",
-		"globals": "14.0.0",
-		"jiti": "2.6.1",
-		"tslib": "2.4.0",
+		"eslint": "^9.39.4",
+		"eslint-plugin-obsidianmd": "^0.3.0",
+		"globals": "^17.6.0",
+		"jiti": "^2.6.1",
+		"obsidian": "latest",
+		"tslib": "^2.8.1",
 		"typescript": "^5.8.3",
-		"typescript-eslint": "8.35.1"
-	},
-	"dependencies": {
-		"obsidian": "latest"
+		"typescript-eslint": "^8.59.1"
 	}
 }

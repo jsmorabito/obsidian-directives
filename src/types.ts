@@ -113,6 +113,21 @@ export interface DirectiveHandler {
    * Use to cancel subscriptions, stop audio, etc.
    */
   destroy?(widget: DirectiveWidget): void
+
+  /**
+   * Optional: return the initial body text to insert when this directive is
+   * selected from the autocomplete suggest.  The returned string is placed
+   * between the opening fence and the blank cursor line.
+   *
+   * Example — a log handler returning "## Log\n" produces:
+   *   :::log
+   *   ## Log
+   *   [cursor]
+   *   :::
+   *
+   * Omit (or return "") for no pre-filled body.
+   */
+  getInsertionBody?(): string
 }
 
 // ---------------------------------------------------------------------------

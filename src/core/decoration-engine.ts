@@ -34,7 +34,7 @@ import {
 import { EditorState, RangeSetBuilder, StateField, Transaction } from '@codemirror/state'
 import type { Extension } from '@codemirror/state'
 
-import type { DirectiveWidget, ParsedDirective } from '../types'
+import type { ParsedDirective } from '../types'
 import type { DirectiveRegistry } from './registry'
 import { directivesField } from './parser'
 import { eventBusField } from './event-bus'
@@ -57,17 +57,17 @@ class FallbackWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const wrap = document.createElement('div')
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--fallback'
     wrap.setAttribute('data-directive', this.directive.name)
 
-    const badge = document.createElement('span')
+    const badge = activeDocument.createElement('span')
     badge.className = 'directive-widget__name'
     badge.textContent = `:${this.directive.name}`
     wrap.appendChild(badge)
 
     if (this.directive.body) {
-      const body = document.createElement('div')
+      const body = activeDocument.createElement('div')
       body.className = 'directive-widget__body'
       body.textContent = this.directive.body
       wrap.appendChild(body)
@@ -137,7 +137,7 @@ function buildBlockDecorations(
 
       if (handler) {
         try {
-          widget = handler.render(directive, state) as DirectiveWidget
+          widget = handler.render(directive, state)
         } catch (err) {
           console.error(`[obsidian-directives] handler "${directive.name}" render() threw:`, err)
           widget = new FallbackWidget(directive)
@@ -182,7 +182,7 @@ function buildInlineDecorations(
 
       if (handler) {
         try {
-          widget = handler.render(directive, view.state) as DirectiveWidget
+          widget = handler.render(directive, view.state)
         } catch (err) {
           console.error(`[obsidian-directives] inline handler "${directive.name}" render() threw:`, err)
           continue
