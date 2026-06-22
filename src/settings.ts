@@ -47,6 +47,12 @@ export interface DirectivesSettings {
    */
   logDateFormat: string
 
+  /**
+   * Show a button in the active view's header bar that opens the log popover.
+   * Disabled by default — enable if you use the log popover frequently.
+   */
+  logViewButton: boolean
+
   // ── Tab handler ─────────────────────────────────────────────────────────
   /** Beats per minute when the bpm= attribute is absent. */
   defaultBpm: number
@@ -63,6 +69,18 @@ export interface DirectivesSettings {
   /** Layout used when the layout= attribute is absent. */
   defaultChordLayout: ChordLayout
 
+  // ── Fonts ─────────────────────────────────────────────────────────────────
+  /** Custom font for :::log body lines. Empty = inherit Obsidian's text font. */
+  fontLog: string
+  /** Custom font for :::audio widgets. Empty = inherit. */
+  fontAudio: string
+  /** Custom font for :::chords widgets. Empty = inherit. */
+  fontChords: string
+  /** Custom font for :::tab widgets. Empty = inherit. */
+  fontTab: string
+  /** Custom font for :::youtube widgets. Empty = inherit. */
+  fontYoutube: string
+
   // ── Internal ─────────────────────────────────────────────────────────────
   /** Incremented on breaking schema changes so old data can be migrated. */
   _version: number
@@ -73,8 +91,14 @@ export const DEFAULT_SETTINGS: DirectivesSettings = {
   logDateFormat:        '{{date}}',
   logDateHeadingLevel:  6,
   logTitleHeadingLevel: 2,
+  logViewButton:        false,
   defaultBpm:         120,
   defaultCpb:         2,
   defaultChordLayout: 'grid',
+  fontLog:     '',
+  fontAudio:   '',
+  fontChords:  '',
+  fontTab:     '',
+  fontYoutube: '',
   _version:           2,
 }

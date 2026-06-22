@@ -46,6 +46,7 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   private logViewButtons = new WeakMap<MarkdownView, HTMLElement>()
   private openLogPopover: ViewLogPopover | null = null
+  private fontStyleEl: HTMLStyleElement | null = null
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -93,13 +94,33 @@ export default class ObsidianDirectivesPlugin extends Plugin
     }))
     this.app.workspace.onLayoutReady(() => void this.syncActiveLogButton())
 
+    this.applyFontSettings()
     this.addSettingTab(new DirectivesSettingTab(this.app, this))
   }
 
   onunload(): void {
     this.closeLogPopover()
+    this.fontStyleEl?.remove()
     disposeAllAudio()
     this.registry = undefined as unknown as DirectiveRegistry
+  }
+
+  applyFontSettings(): void {
+    if (!this.fontStyleEl) {
+      this.fontStyleEl = document.createElement('style')
+      this.fontStyleEl.id = 'obsidian-directives-fonts'
+      document.head.appendChild(this.fontStyleEl)
+    }
+    const s = this.settings
+    const rule = (prop: string, val: string) =>
+      val.trim() ? `  ${prop}: ${val.trim()};` : ''
+    this.fontStyleEl.textContent = `:root {\n` +
+      rule('--directive-font-log',     s.fontLog)     + '\n' +
+      rule('--directive-font-audio',   s.fontAudio)   + '\n' +
+      rule('--directive-font-chords',  s.fontChords)  + '\n' +
+      rule('--directive-font-tab',     s.fontTab)     + '\n' +
+      rule('--directive-font-youtube', s.fontYoutube) + '\n' +
+      `}`
   }
 
   // ── Log view-header button ────────────────────────────────────────────────
@@ -111,6 +132,7 @@ export default class ObsidianDirectivesPlugin extends Plugin
     const file = view.file
     if (!file) return
 
+    const enabled = this.settings.logViewButton
     let hasLog = false
     try {
       const content = await this.app.vault.cachedRead(file)
@@ -119,15 +141,17 @@ export default class ObsidianDirectivesPlugin extends Plugin
       return
     }
 
+    const show = enabled && hasLog
+
     if (!this.logViewButtons.has(view)) {
-      if (!hasLog) return
+      if (!show) return
       const btn = view.addAction('logs', 'View log', (evt: MouseEvent) => {
         this.toggleLogPopover(evt, view)
       })
       btn.addClass('clickable-icon')
       this.logViewButtons.set(view, btn)
     } else {
-      this.logViewButtons.get(view)!.style.display = hasLog ? '' : 'none'
+      this.logViewButtons.get(view)!.style.display = show ? '' : 'none'
     }
   }
 
@@ -141,10 +165,13 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.openLogPopover = new ViewLogPopover(
       this.app,
       file,
-      this.settings,
       evt.currentTarget as HTMLElement,
       () => { this.openLogPopover = null },
     )
+  }
+
+  refreshLogButton(): Promise<void> {
+    return this.syncActiveLogButton()
   }
 
   private closeLogPopover(): void {
@@ -223,5 +250,6 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings)
+    this.applyFontSettings()
   }
 }

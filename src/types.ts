@@ -83,6 +83,21 @@ export interface DirectiveHandler {
   readonly name: string
 
   /**
+   * When true, the directive is rendered in-place: raw Markdown stays visible
+   * and editable at all times. The decoration engine applies Decoration.line()
+   * classes to each line instead of Decoration.replace(). render() is never
+   * called for in-place handlers.
+   */
+  decorateInPlace?: boolean
+
+  /**
+   * Called when decorateInPlace is true. Return a WidgetType to be placed as
+   * an inline widget at the end of the opening fence line (e.g. action
+   * buttons). Return null for no widget.
+   */
+  buildActionWidget?(directive: ParsedDirective, state: EditorState): WidgetType | null
+
+  /**
    * Called when a directive of this type needs a widget.
    *
    * Receives EditorState (not EditorView) because block decorations must
@@ -92,6 +107,7 @@ export interface DirectiveHandler {
    * CM6 calls later with the full EditorView.
    *
    * The EventBus is reachable here via state.field(eventBusField).
+   * Not called when decorateInPlace is true.
    */
   render(directive: ParsedDirective, state: EditorState): DirectiveWidget
 

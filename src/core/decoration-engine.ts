@@ -123,8 +123,6 @@ function buildBlockDecorations(
       .sort((a, b) => a.from - b.from)
 
     for (const directive of ordered) {
-      if (cursorOverlaps(state, directive.from, directive.to)) continue
-
       // Snap to exact CM6 line boundaries — required for block: true.
       const fromLine = state.doc.lineAt(directive.from)
       const toLine   = state.doc.lineAt(Math.max(directive.to - 1, directive.from))
@@ -133,6 +131,40 @@ function buildBlockDecorations(
       if (from >= to) continue
 
       const handler = registry.get(directive.name)
+
+      if (handler?.decorateInPlace) {
+        // In-place mode: text stays visible and editable, no widget replacement.
+        // Apply Decoration.line() classes to every line in the directive range.
+        // IMPORTANT: all builder.add() calls must be in ascending position order.
+        let pos = from
+        while (pos <= to) {
+          const line = state.doc.lineAt(pos)
+          const isFence = line.from === fromLine.from || line.from === toLine.from
+          builder.add(line.from, line.from, Decoration.line({
+            class: isFence
+              ? `directive-inplace directive-inplace-fence directive-inplace--${handler.name}`
+              : `directive-inplace directive-inplace-body directive-inplace--${handler.name}`,
+          }))
+          // Action widget goes at end of opening fence line, right after its
+          // line decoration (must be added here to maintain ascending order).
+          if (line.from === fromLine.from && handler.buildActionWidget) {
+            try {
+              const actionWidget = handler.buildActionWidget(directive, state)
+              if (actionWidget) {
+                builder.add(fromLine.to, fromLine.to, Decoration.widget({ widget: actionWidget, side: 1 }))
+              }
+            } catch (err) {
+              console.error(`[obsidian-directives] handler "${directive.name}" buildActionWidget() threw:`, err)
+            }
+          }
+          if (line.to >= state.doc.length) break
+          pos = line.to + 1
+        }
+        continue
+      }
+
+      if (cursorOverlaps(state, directive.from, directive.to)) continue
+
       let widget: WidgetType
 
       if (handler) {

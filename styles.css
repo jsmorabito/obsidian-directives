@@ -21,6 +21,11 @@
   /* No drop shadow — keeps visual weight consistent with Obsidian's flat aesthetic */
 }
 
+.directive-widget--audio   { font-family: var(--directive-font-audio,   var(--font-interface)); }
+.directive-widget--chords  { font-family: var(--directive-font-chords,  var(--font-interface)); }
+.directive-widget--tab     { font-family: var(--directive-font-tab,     var(--font-interface)); }
+.directive-widget--youtube { font-family: var(--directive-font-youtube, var(--font-interface)); }
+
 /* --------------------------------------------------------------------------
    Fallback widget (unrecognized directive name)
    -------------------------------------------------------------------------- */
@@ -459,6 +464,58 @@
 }
 
 /* --------------------------------------------------------------------------
+   In-place directive line decorations
+   -------------------------------------------------------------------------- */
+
+/* Fence lines (:::log[...] and :::) — muted so they recede visually */
+.directive-inplace-fence {
+  position: relative;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+}
+
+/* Body lines for :::log — custom font if set, otherwise Obsidian's text font */
+.directive-inplace-body.directive-inplace--log {
+  font-family: var(--directive-font-log, var(--font-text));
+}
+
+/* Remove top padding from the first body line (e.g. ## Log title) so it
+   sits flush against the :::log fence line above it. */
+.directive-inplace-fence + .directive-inplace-body.directive-inplace--log {
+  padding-top: 0 !important;
+}
+
+/* Remove top padding from the line immediately after a heading body line
+   (e.g. the first date entry after ## Log). */
+.directive-inplace-body.directive-inplace--log:has(.cm-header) + .directive-inplace-body.directive-inplace--log {
+  padding-top: 0 !important;
+}
+
+/* Action buttons — inline at end of opening fence line */
+.directive-log-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.directive-log-actions-btn svg {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
+
+.directive-log-actions-date-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+/* --------------------------------------------------------------------------
    Log widget
    -------------------------------------------------------------------------- */
 
@@ -575,24 +632,36 @@
 }
 
 .directive-log-content {
+  font-size: var(--font-ui-small);
+}
+
+.directive-log-content > :first-child {
+  margin-top: 0;
+}
+
+.directive-log-content > :last-child {
+  margin-bottom: 0;
+}
+
+.directive-log-content ul,
+.directive-log-content ol {
   margin: 0;
   padding-left: var(--list-indent);
-  list-style: disc;
 }
 
-.directive-log-content ::marker {
-  color: var(--list-marker-color);
-}
-
-.directive-log-content .directive-log-content {
-  list-style: circle;
-}
-
-.directive-log-item {
-  font-size: var(--font-ui-small);
-  color: var(--text-normal);
+.directive-log-content li {
   line-height: var(--line-height-normal);
   padding: 1px 0;
+}
+
+.directive-log-content p {
+  margin: 0;
+}
+
+.directive-log-content img {
+  max-width: 100%;
+  border-radius: var(--radius-s);
+  margin-top: var(--size-2-2);
 }
 
 /* --------------------------------------------------------------------------
@@ -684,42 +753,6 @@
   color: var(--text-normal);
 }
 
-.view-log-add-form {
-  display: flex;
-  gap: var(--size-4-2);
-  align-items: center;
-  margin-bottom: var(--size-4-3);
-  padding-bottom: var(--size-4-3);
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.view-log-date-input {
-  width: 140px;
-  flex-shrink: 0;
-  font-size: var(--font-ui-small);
-  font-family: var(--font-interface);
-  color: var(--text-normal);
-  background: var(--background-modifier-form-field);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  padding: var(--size-2-3) var(--size-4-2);
-}
-
-.view-log-note-input {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-ui-small);
-  font-family: var(--font-interface);
-  color: var(--text-normal);
-  background: var(--background-modifier-form-field);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  padding: var(--size-2-3) var(--size-4-2);
-}
-
-.view-log-add-btn {
-  flex-shrink: 0;
-}
 
 .view-log-entries {
   display: flex;
@@ -739,20 +772,40 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  display: inline-block;
 }
 
-.view-log-entry-items {
+.view-log-entry-date:hover {
+  color: var(--text-accent);
+}
+
+.view-log-entry-content {
+  font-size: var(--font-ui-small);
+}
+
+.view-log-entry-content > :first-child { margin-top: 0; }
+.view-log-entry-content > :last-child  { margin-bottom: 0; }
+
+.view-log-entry-content ul,
+.view-log-entry-content ol {
   margin: 0;
   padding-left: var(--size-4-4);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
-.view-log-entry-items li {
-  font-size: var(--font-ui-small);
-  color: var(--text-normal);
+.view-log-entry-content li {
   line-height: var(--line-height-tight);
+  padding: 1px 0;
+}
+
+.view-log-entry-content p {
+  margin: 0;
+}
+
+.view-log-entry-content img {
+  max-width: 100%;
+  border-radius: var(--radius-s);
+  margin-top: var(--size-2-2);
 }
 
 .view-log-empty {

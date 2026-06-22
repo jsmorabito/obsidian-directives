@@ -16,6 +16,38 @@ export class DirectivesSettingTab extends PluginSettingTab {
     super(app, plugin)
   }
 
+  private addFontSetting(
+    containerEl: HTMLElement,
+    label: string,
+    desc: string,
+    get: () => string,
+    set: (v: string) => Promise<void>,
+  ): void {
+    let currentText = ''
+    new Setting(containerEl)
+      .setName(label)
+      .setDesc(desc)
+      .addText(text => {
+        text.setPlaceholder('e.g. New York').setValue(get())
+        currentText = get()
+        text.inputEl.addEventListener('input', () => { currentText = text.inputEl.value })
+        text.inputEl.addEventListener('keydown', async (e: KeyboardEvent) => {
+          if (e.key === 'Enter') await set(currentText)
+        })
+      })
+      .addButton(btn =>
+        btn.setButtonText('Apply').setCta().onClick(async () => {
+          await set(currentText)
+        }),
+      )
+      .addButton(btn =>
+        btn.setButtonText('Reset').onClick(async () => {
+          await set('')
+          this.display()
+        }),
+      )
+  }
+
   display(): void {
     const { containerEl } = this
     containerEl.empty()
@@ -114,6 +146,30 @@ export class DirectivesSettingTab extends PluginSettingTab {
       this.plugin.settings.logDateStyle === 'wikilink',
     )
 
+    new Setting(containerEl)
+      .setName('Show log preview button')
+      .setDesc(
+        'Add a button to the editor header bar that opens a quick-look popover ' +
+        'of your log entries. Click an entry date to jump to it in the editor.',
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.logViewButton)
+          .onChange(async value => {
+            this.plugin.settings.logViewButton = value
+            await this.plugin.saveSettings()
+            void this.plugin.refreshLogButton()
+          }),
+      )
+
+    this.addFontSetting(
+      containerEl,
+      'Font',
+      'Font for log body lines. Leave empty to use your default text font.',
+      () => this.plugin.settings.fontLog,
+      async v => { this.plugin.settings.fontLog = v; await this.plugin.saveSettings() },
+    )
+
     // ── Tab directive ──────────────────────────────────────────────────────
 
     new Setting(containerEl).setName("Tab directive").setHeading()
@@ -154,6 +210,14 @@ export class DirectivesSettingTab extends PluginSettingTab {
           }),
       )
 
+    this.addFontSetting(
+      containerEl,
+      'Font',
+      'Font for :::tab widgets. Leave empty to use the default.',
+      () => this.plugin.settings.fontTab,
+      async v => { this.plugin.settings.fontTab = v; await this.plugin.saveSettings() },
+    )
+
     // ── Chords directive ───────────────────────────────────────────────────
 
     new Setting(containerEl).setName("Chords directive").setHeading()
@@ -177,5 +241,36 @@ export class DirectivesSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings()
           }),
       )
+    this.addFontSetting(
+      containerEl,
+      'Font',
+      'Font for :::chords widgets. Leave empty to use the default.',
+      () => this.plugin.settings.fontChords,
+      async v => { this.plugin.settings.fontChords = v; await this.plugin.saveSettings() },
+    )
+
+    // ── Audio directive ────────────────────────────────────────────────────
+
+    new Setting(containerEl).setName('Audio directive').setHeading()
+
+    this.addFontSetting(
+      containerEl,
+      'Font',
+      'Font for :::audio widgets. Leave empty to use the default.',
+      () => this.plugin.settings.fontAudio,
+      async v => { this.plugin.settings.fontAudio = v; await this.plugin.saveSettings() },
+    )
+
+    // ── YouTube directive ──────────────────────────────────────────────────
+
+    new Setting(containerEl).setName('YouTube directive').setHeading()
+
+    this.addFontSetting(
+      containerEl,
+      'Font',
+      'Font for :::youtube widgets. Leave empty to use the default.',
+      () => this.plugin.settings.fontYoutube,
+      async v => { this.plugin.settings.fontYoutube = v; await this.plugin.saveSettings() },
+    )
   }
 }

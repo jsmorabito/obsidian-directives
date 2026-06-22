@@ -10,7 +10,8 @@ An Obsidian (desktop-only) community plugin that renders **generic directives** 
 live editor using CodeMirror 6.  Directives are fenced Markdown blocks that map to
 interactive widgets: audio players, chord diagrams, guitar tabs, and YouTube embeds.
 
-The directive syntax follows the [CommonMark generic directives proposal](https://talk.commonmark.org/t/generic-directives-plugins-syntax/444):
+The directive syntax follows the [CommonMark generic directives proposal](https://talk.commonmark.org/t/generic-directives-plugins-syntax/444)
+([micromark reference implementation](https://github.com/micromark/micromark-extension-directive)):
 
 ```
 :name[label]{key=val}            ← text  (inline)

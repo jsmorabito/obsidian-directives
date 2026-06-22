@@ -1,4 +1,109 @@
-# Obsidian community plugin
+# Obsidian Directives — agent context
+
+## What this plugin does
+
+**obsidian-directives** renders interactive widgets in the CM6 live editor using a
+[generic directives](https://talk.commonmark.org/t/generic-directives-plugins-syntax/444) syntax
+(`:name`, `::name`, `:::name`).  It is desktop-only.
+
+### Built-in directive handlers
+
+| Directive | File | What it renders |
+|---|---|---|
+| `:::audio` | `src/handlers/audio.ts` | Local audio player with a scrubber and timestamped note list |
+| `:::chords` | `src/handlers/chords.ts` | SVG chord-diagram grid (~45 chords); syncs highlight to audio playhead |
+| `:::tab` | `src/handlers/tab.ts` | Monospace guitar tab with a BPM-driven playhead |
+| `:::youtube` | `src/handlers/youtube.ts` | YouTube iframe with timestamped note list |
+| `:::log` | `src/handlers/log.ts` | Chronological activity log with "New entry" / date-picker buttons and a view-header popover |
+
+### Core architecture
+
+```
+src/
+  main.ts                   Plugin entry + public API (ObsidianDirectivesAPI)
+  settings.ts               Settings interface + defaults
+  api.ts                    Public type file for third-party plugins
+  types.ts                  ParsedDirective, DirectiveHandler, DirectiveWidget, DirectiveEventMap
+  core/
+    parser.ts               StateField<ParsedDirective[]> — re-parses on every change
+    registry.ts             DirectiveRegistry — maps names → handlers
+    event-bus.ts            EventBus + StateField<EventBus>
+    decoration-engine.ts    CM6 extension factory:
+                              • block StateField → block decorations (::, :::)
+                              • inline ViewPlugin → inline decorations (:)
+  handlers/                 One file per directive (see table above)
+  ui/
+    settings-tab.ts         PluginSettingTab
+    directive-suggest.ts    EditorSuggest for autocomplete
+    add-to-log-modal.ts     Modal + insertNoteIntoLog() helper
+    view-log-modal.ts       ViewLogPopover — view-header popover for :::log files
+```
+
+### Critical constraint: block decorations must come from a StateField
+
+Obsidian's CM6 build throws `"Block decorations may not be specified via plugins"` if you try
+to produce block decorations from a `ViewPlugin`.  The decoration engine is split:
+
+- **Block** (`::`, `:::`) → `StateField` with `provide: f => EditorView.decorations.from(f)`
+- **Inline** (`:`) → `ViewPlugin`
+
+`DirectiveHandler.render()` receives `EditorState` (not `EditorView`) for this reason.
+
+### Click-to-edit (required in every widget)
+
+Every `toDOM()` outermost element must dispatch a cursor move on `mousedown` so the block
+can be edited.  Interactive children must call `e.stopPropagation()` on their own `mousedown`.
+
+```typescript
+el.addEventListener('mousedown', (e: MouseEvent) => {
+  e.preventDefault()
+  view.dispatch({ selection: { anchor: directive.from } })
+  view.focus()
+})
+```
+
+### Event bus
+
+One `EventBus` per editor view, stored in `eventBusField` (a `StateField`).
+Retrieve in `render()` with `state.field(eventBusField)`.  Key events:
+`audio:play`, `audio:pause`, `audio:timeupdate`, `audio:seek`, `youtube:timeupdate`, `youtube:seek`.
+
+### Adding a new handler
+
+1. Create `src/handlers/my-handler.ts`, export `createMyHandler(): DirectiveHandler`.
+2. `render()` returns a class extending `DirectiveWidget`.
+3. Register in `src/main.ts` `onload()`: `this.addHandler(createMyHandler())`.
+4. Add CSS to `styles.css` using only Obsidian CSS variables (no hardcoded colours).
+5. `npm run build` → reload Obsidian.
+
+### Third-party handler API
+
+External plugins call `getDirectivesAPI(app)` (from a copy of `src/api.ts`) and call
+`api.addHandler(handler)`.  The returned unregister function should be passed to
+`this.register(...)`.
+
+### Settings (stored in `data.json`)
+
+| Key | Type | Default |
+|---|---|---|
+| `defaultBpm` | number | 120 |
+| `defaultCpb` | number | 2 |
+| `defaultChordLayout` | string | `'grid'` |
+| `logDateStyle` | string | `'plain'` |
+| `logDateFormat` | string | `'{{date}}'` |
+| `logDateHeadingLevel` | number | 0 |
+| `logTitleHeadingLevel` | number | 0 |
+| `_version` | number | 2 |
+
+### TypeScript notes
+
+- `"noUncheckedIndexedAccess": true` — array/Map reads return `T | undefined`; always guard.
+- All `@codemirror/*` packages are `external` in esbuild (Obsidian provides them at runtime).
+- The plugin class implements `ObsidianDirectivesAPI` from `src/api.ts`.
+
+---
+
+## Obsidian community plugin
 
 ## Project overview
 
@@ -248,3 +353,5 @@ this.registerInterval(window.setInterval(() => { /* ... */ }, 1000));
 - Developer policies: https://docs.obsidian.md/Developer+policies
 - Plugin guidelines: https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines
 - Style guide: https://help.obsidian.md/style-guide
+- Generic directives proposal (CommonMark): https://talk.commonmark.org/t/generic-directives-plugins-syntax/444
+- micromark directive extension (reference implementation): https://github.com/micromark/micromark-extension-directive
