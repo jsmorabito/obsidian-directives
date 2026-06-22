@@ -10,6 +10,7 @@
 import { setIcon } from 'obsidian'
 import { EditorView, WidgetType } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
+import { foldEffect, unfoldEffect, foldedRanges, foldService } from '@codemirror/language'
 
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
@@ -142,6 +143,67 @@ function buildDateLine(dateISO: string, settings: DirectivesSettings): string {
 }
 
 // ---------------------------------------------------------------------------
+// Fold helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns fold ranges for each date heading line inside the directive body,
+ * resolved via the editor's foldService so ranges exactly match what
+ * Obsidian's fold extension expects.
+ */
+function headingFoldRanges(
+  view: EditorView,
+  directive: ParsedDirective,
+): { from: number; to: number }[] {
+  const state = view.state
+  const doc = state.doc
+  const openLine = doc.lineAt(directive.from)
+  const bodyStart = openLine.to + 1
+  const closeLine = doc.lineAt(directive.to)
+
+  const ranges: { from: number; to: number }[] = []
+
+  for (let pos = bodyStart; pos < closeLine.from; ) {
+    const line = doc.lineAt(pos)
+    if (DATE_RE.exec(line.text)) {
+      // Ask each registered fold service for the canonical range at this line.
+      for (const fn of state.facet(foldService)) {
+        const r = fn(state, line.from, line.to)
+        if (r) { ranges.push(r); break }
+      }
+    }
+    if (line.to + 1 > doc.length) break
+    pos = line.to + 1
+  }
+
+  return ranges
+}
+
+function anyFolded(view: EditorView, directive: ParsedDirective): boolean {
+  const folded = foldedRanges(view.state)
+  const ranges = headingFoldRanges(view, directive)
+  let cursor = folded.iter()
+  const foldedFroms = new Set<number>()
+  while (cursor.value !== null) { foldedFroms.add(cursor.from); cursor.next() }
+  return ranges.some(r => foldedFroms.has(r.from))
+}
+
+function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
+  const ranges = headingFoldRanges(view, directive)
+  if (ranges.length === 0) return false
+  const collapse = !anyFolded(view, directive)
+  const folded = foldedRanges(view.state)
+  let cursor = folded.iter()
+  const foldedFroms = new Set<number>()
+  while (cursor.value !== null) { foldedFroms.add(cursor.from); cursor.next() }
+  const effects = ranges
+    .filter(r => collapse ? !foldedFroms.has(r.from) : foldedFroms.has(r.from))
+    .map(r => (collapse ? foldEffect : unfoldEffect).of(r))
+  if (effects.length) view.dispatch({ effects })
+  return collapse
+}
+
+// ---------------------------------------------------------------------------
 // LogActionsWidget — inline at end of the opening fence line
 // ---------------------------------------------------------------------------
 
@@ -190,7 +252,19 @@ class LogActionsWidget extends WidgetType {
     newBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     newBtn.addEventListener('click', () => insertNewEntry(view, this.directive, this.settings))
 
+    const foldBtn = activeDocument.createElement('button')
+    foldBtn.className = 'clickable-icon directive-log-actions-btn'
+    foldBtn.setAttribute('aria-label', 'Collapse all log entries')
+    setIcon(foldBtn, 'chevrons-down-up')
+    foldBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    foldBtn.addEventListener('click', () => {
+      const didCollapse = toggleFoldAll(view, this.directive)
+      setIcon(foldBtn, didCollapse ? 'chevrons-up-down' : 'chevrons-down-up')
+      foldBtn.setAttribute('aria-label', didCollapse ? 'Expand all log entries' : 'Collapse all log entries')
+    })
+
     wrap.appendChild(dateInput)
+    wrap.appendChild(foldBtn)
     wrap.appendChild(calBtn)
     wrap.appendChild(newBtn)
 
