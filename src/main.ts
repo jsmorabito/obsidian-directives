@@ -1,4 +1,4 @@
-import { Plugin, TFile } from 'obsidian'
+import { MarkdownView, Plugin, TFile } from 'obsidian'
 import { DirectiveRegistry } from './core/registry'
 import { createDirectiveExtension } from './core/decoration-engine'
 import { eventBusField } from './core/event-bus'
@@ -10,6 +10,7 @@ import { createLogHandler } from './handlers/log'
 import { DirectivesSettingTab } from './ui/settings-tab'
 import { DirectiveSuggest } from './ui/directive-suggest'
 import { AddToLogModal } from './ui/add-to-log-modal'
+import { ViewLogPopover } from './ui/view-log-modal'
 import { DEFAULT_SETTINGS } from './settings'
 import type { DirectivesSettings } from './settings'
 import type { DirectiveHandler } from './types'
@@ -42,6 +43,9 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   registry!: DirectiveRegistry
   settings!: DirectivesSettings
+
+  private logViewButtons = new WeakMap<MarkdownView, HTMLElement>()
+  private openLogPopover: ViewLogPopover | null = null
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -79,12 +83,73 @@ export default class ObsidianDirectivesPlugin extends Plugin
         new AddToLogModal(this.app, this.settings, logFiles).open()
       },
     })
+    this.registerEvent(this.app.workspace.on('file-open', () => {
+      this.closeLogPopover()
+      void this.syncActiveLogButton()
+    }))
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+      this.closeLogPopover()
+      void this.syncActiveLogButton()
+    }))
+    this.app.workspace.onLayoutReady(() => void this.syncActiveLogButton())
+
     this.addSettingTab(new DirectivesSettingTab(this.app, this))
   }
 
   onunload(): void {
+    this.closeLogPopover()
     disposeAllAudio()
     this.registry = undefined as unknown as DirectiveRegistry
+  }
+
+  // ── Log view-header button ────────────────────────────────────────────────
+
+  private async syncActiveLogButton(): Promise<void> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView)
+    if (!view) return
+
+    const file = view.file
+    if (!file) return
+
+    let hasLog = false
+    try {
+      const content = await this.app.vault.cachedRead(file)
+      hasLog = /^:::log/m.test(content)
+    } catch {
+      return
+    }
+
+    if (!this.logViewButtons.has(view)) {
+      if (!hasLog) return
+      const btn = view.addAction('logs', 'View log', (evt: MouseEvent) => {
+        this.toggleLogPopover(evt, view)
+      })
+      btn.addClass('clickable-icon')
+      this.logViewButtons.set(view, btn)
+    } else {
+      this.logViewButtons.get(view)!.style.display = hasLog ? '' : 'none'
+    }
+  }
+
+  private toggleLogPopover(evt: MouseEvent, view: MarkdownView): void {
+    if (this.openLogPopover) {
+      this.closeLogPopover()
+      return
+    }
+    const file = view.file
+    if (!file) return
+    this.openLogPopover = new ViewLogPopover(
+      this.app,
+      file,
+      this.settings,
+      evt.currentTarget as HTMLElement,
+      () => { this.openLogPopover = null },
+    )
+  }
+
+  private closeLogPopover(): void {
+    this.openLogPopover?.close()
+    this.openLogPopover = null
   }
 
   // ── Public API (ObsidianDirectivesAPI) ───────────────────────────────────

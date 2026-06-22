@@ -41,14 +41,14 @@ function extractDate(match: RegExpExecArray): string {
   return match[1] ?? match[2] ?? ''
 }
 
-interface LogEntry {
+export interface LogEntry {
   date: string           // "YYYY-MM-DD"
   dateOffset: number     // char offset of the date line from body start
   lines: string[]        // content lines (leading indent stripped for display)
   lineOffsets: number[]  // char offset of each content line from body start
 }
 
-function parseLogBody(body: string): LogEntry[] {
+export function parseLogBody(body: string): LogEntry[] {
   const entries: LogEntry[] = []
   let current: LogEntry | null = null
   let offset = 0
