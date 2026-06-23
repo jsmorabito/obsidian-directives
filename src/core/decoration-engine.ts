@@ -137,6 +137,7 @@ function buildBlockDecorations(
         // Apply Decoration.line() classes to every line in the directive range.
         // IMPORTANT: all builder.add() calls must be in ascending position order.
         let pos = from
+        let hintPlaced = false
         while (pos <= to) {
           const line = state.doc.lineAt(pos)
           const isFence = line.from === fromLine.from || line.from === toLine.from
@@ -155,6 +156,25 @@ function buildBlockDecorations(
               }
             } catch (err) {
               console.error(`[obsidian-directives] handler "${directive.name}" buildActionWidget() threw:`, err)
+            }
+          }
+          // Hint widget: placed at the start of the first non-heading body line
+          // so it appears at normal text size (not heading size).
+          if (
+            !hintPlaced &&
+            handler.buildHintWidget &&
+            line.from > fromLine.to &&
+            line.from < toLine.from &&
+            !line.text.trimStart().startsWith('#')
+          ) {
+            try {
+              const hintWidget = handler.buildHintWidget(directive, state)
+              if (hintWidget) {
+                builder.add(line.from, line.from, Decoration.widget({ widget: hintWidget, side: -1 }))
+                hintPlaced = true
+              }
+            } catch (err) {
+              console.error(`[obsidian-directives] handler "${directive.name}" buildHintWidget() threw:`, err)
             }
           }
           if (line.to >= state.doc.length) break

@@ -131,6 +131,13 @@ export interface DirectiveHandler {
   destroy?(widget: DirectiveWidget): void
 
   /**
+   * Optional: return a widget displayed inside an empty directive body as a
+   * hint. Called only when decorateInPlace is true and the body has no
+   * recognised entries. Return null for no hint.
+   */
+  buildHintWidget?(directive: ParsedDirective, state: EditorState): WidgetType | null
+
+  /**
    * Optional: return the initial body text to insert when this directive is
    * selected from the autocomplete suggest.  The returned string is placed
    * between the opening fence and the blank cursor line.

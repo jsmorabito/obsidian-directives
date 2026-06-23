@@ -122,8 +122,11 @@ export function insertNewEntry(
   const subItem = settings.logDateHeadingLevel > 0 ? '- ' : '    - '
   const toInsert = `${buildDateLine(dateISO, settings)}\n${subItem}\n`
   const absPos = bodyStart + insertOffset
+  // Remove any blank lines between insertOffset and the next content/fence so
+  // they don't appear below the newly inserted entry.
+  const blankCharsAfter = charCount - insertOffset
   view.dispatch({
-    changes: { from: absPos, insert: toInsert },
+    changes: { from: absPos, to: absPos + blankCharsAfter, insert: toInsert },
     selection: { anchor: absPos + toInsert.length - 1 },
   })
   view.focus()
@@ -186,6 +189,84 @@ function anyFolded(view: EditorView, directive: ParsedDirective): boolean {
   const foldedFroms = new Set<number>()
   while (cursor.value !== null) { foldedFroms.add(cursor.from); cursor.next() }
   return ranges.some(r => foldedFroms.has(r.from))
+}
+
+/**
+ * Fold/unfold entries based on a search query.
+ * Entries whose date or content lines contain the query (case-insensitive)
+ * are unfolded; non-matching entries are folded.
+ * Pass an empty query to unfold all.
+ */
+function applySearchFilter(
+  view: EditorView,
+  directive: ParsedDirective,
+  query: string,
+): void {
+  const state = view.state
+  const doc = state.doc
+  const q = query.toLowerCase().trim()
+  const openLine = doc.lineAt(directive.from)
+  const bodyStart = openLine.to + 1
+  const closeLine = doc.lineAt(directive.to)
+
+  // Build list of {dateLineFrom, dateLineTo, contentText, foldRange}
+  interface Section {
+    foldRange: { from: number; to: number } | null
+    matches: boolean
+  }
+
+  const sections: Section[] = []
+  let current: { from: number; to: number; lines: string[] } | null = null
+
+  for (let pos = bodyStart; pos < closeLine.from; ) {
+    const line = doc.lineAt(pos)
+    if (DATE_RE.exec(line.text)) {
+      if (current) {
+        let foldRange: { from: number; to: number } | null = null
+        for (const fn of state.facet(foldService)) {
+          const r = fn(state, doc.lineAt(current.from).from, doc.lineAt(current.from).to)
+          if (r) { foldRange = r; break }
+        }
+        sections.push({
+          foldRange,
+          matches: !q || current.lines.some(l => l.toLowerCase().includes(q)),
+        })
+      }
+      current = { from: line.from, to: line.to, lines: [line.text] }
+    } else if (current) {
+      current.lines.push(line.text)
+    }
+    if (line.to + 1 > doc.length) break
+    pos = line.to + 1
+  }
+  if (current) {
+    let foldRange: { from: number; to: number } | null = null
+    for (const fn of state.facet(foldService)) {
+      const r = fn(state, doc.lineAt(current.from).from, doc.lineAt(current.from).to)
+      if (r) { foldRange = r; break }
+    }
+    sections.push({
+      foldRange,
+      matches: !q || current.lines.some(l => l.toLowerCase().includes(q)),
+    })
+  }
+
+  const folded = foldedRanges(state)
+  let cursor = folded.iter()
+  const foldedFroms = new Set<number>()
+  while (cursor.value !== null) { foldedFroms.add(cursor.from); cursor.next() }
+
+  const effects = []
+  for (const section of sections) {
+    if (!section.foldRange) continue
+    const isFolded = foldedFroms.has(section.foldRange.from)
+    if (!section.matches && !isFolded) {
+      effects.push(foldEffect.of(section.foldRange))
+    } else if (section.matches && isFolded) {
+      effects.push(unfoldEffect.of(section.foldRange))
+    }
+  }
+  if (effects.length) view.dispatch({ effects })
 }
 
 function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
@@ -263,7 +344,43 @@ class LogActionsWidget extends WidgetType {
       foldBtn.setAttribute('aria-label', didCollapse ? 'Expand all log entries' : 'Collapse all log entries')
     })
 
+    // Search — button always visible, input slides open beside it
+    const searchInput = activeDocument.createElement('input')
+    searchInput.type = 'text'
+    searchInput.placeholder = 'Search…'
+    searchInput.className = 'directive-log-search-input'
+    searchInput.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    searchInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        searchInput.value = ''
+        applySearchFilter(view, this.directive, '')
+        searchInput.classList.remove('is-open')
+        searchInput.blur()
+      }
+    })
+    searchInput.addEventListener('input', () => {
+      applySearchFilter(view, this.directive, searchInput.value)
+    })
+
+    const searchBtn = activeDocument.createElement('button')
+    searchBtn.className = 'clickable-icon directive-log-actions-btn'
+    searchBtn.setAttribute('aria-label', 'Search log entries')
+    setIcon(searchBtn, 'search')
+    searchBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    searchBtn.addEventListener('click', () => {
+      const isOpen = searchInput.classList.toggle('is-open')
+      if (isOpen) {
+        searchInput.focus()
+      } else {
+        searchInput.value = ''
+        applySearchFilter(view, this.directive, '')
+      }
+    })
+
     wrap.appendChild(dateInput)
+    wrap.appendChild(searchInput)
+    wrap.appendChild(searchBtn)
     wrap.appendChild(foldBtn)
     wrap.appendChild(calBtn)
     wrap.appendChild(newBtn)
@@ -274,6 +391,23 @@ class LogActionsWidget extends WidgetType {
   ignoreEvent(): boolean {
     return false
   }
+}
+
+// ---------------------------------------------------------------------------
+// LogHintWidget — ghost-text shown when the log has no date entries yet
+// ---------------------------------------------------------------------------
+
+class LogHintWidget extends WidgetType {
+  eq(other: WidgetType): boolean { return other instanceof LogHintWidget }
+
+  toDOM(): HTMLElement {
+    const el = activeDocument.createElement('span')
+    el.className = 'directive-log-hint'
+    el.textContent = 'Press + to add your first entry'
+    return el
+  }
+
+  ignoreEvent(): boolean { return true }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +431,11 @@ export function createLogHandler(_app: unknown, settings: DirectivesSettings): D
 
     buildActionWidget(directive: ParsedDirective, _state: EditorState): WidgetType {
       return new LogActionsWidget(directive, settings)
+    },
+
+    buildHintWidget(directive: ParsedDirective, _state: EditorState): WidgetType | null {
+      const entries = parseLogBody(directive.body ?? '')
+      return entries.length === 0 ? new LogHintWidget() : null
     },
 
     render(_directive: ParsedDirective, _state: EditorState): DirectiveWidget {

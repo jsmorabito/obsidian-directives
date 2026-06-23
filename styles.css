@@ -507,6 +507,37 @@
   height: var(--icon-s);
 }
 
+/* Empty state hint — ghost text shown before the first entry is added */
+.directive-log-hint {
+  color: var(--text-faint);
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Search input — slides open when .is-open is toggled by the search button */
+.directive-log-search-input {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: transparent;
+  outline: none;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  padding: 0;
+  transition: width 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
+  pointer-events: none;
+}
+
+.directive-log-search-input.is-open {
+  width: 120px;
+  opacity: 1;
+  padding: 0 4px;
+  pointer-events: auto;
+}
+
 .directive-log-actions-date-input {
   position: absolute;
   opacity: 0;
