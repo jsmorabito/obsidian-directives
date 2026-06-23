@@ -7,6 +7,8 @@ import { createChordsHandler } from './handlers/chords'
 import { createTabHandler } from './handlers/tab'
 import { createYouTubeHandler } from './handlers/youtube'
 import { createLogHandler } from './handlers/log'
+import { createChecklistHandler } from './handlers/checklist'
+import { createAggregatorHandler } from './handlers/aggregator'
 import { DirectivesSettingTab } from './ui/settings-tab'
 import { DirectiveSuggest } from './ui/directive-suggest'
 import { AddToLogModal } from './ui/add-to-log-modal'
@@ -21,7 +23,7 @@ import type { ObsidianDirectivesAPI } from './api'
 export const API_VERSION = '1.0.0'
 
 /** Directive names claimed by built-in handlers. */
-const BUILTIN_NAMES = new Set(['audio', 'chords', 'tab', 'youtube', 'log'])
+const BUILTIN_NAMES = new Set(['audio', 'chords', 'tab', 'youtube', 'log', 'checklist', 'aggregator'])
 
 /** Pattern a valid directive name must match. */
 const VALID_NAME = /^[a-z][a-z0-9-]*$/
@@ -61,6 +63,8 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.addHandler(createTabHandler(this.settings))
     this.addHandler(createYouTubeHandler())
     this.addHandler(createLogHandler(this.app, this.settings))
+    this.addHandler(createChecklistHandler(this.app))
+    this.addHandler(createAggregatorHandler(this.app))
 
     this.registerEditorExtension(createDirectiveExtension(this.registry))
     this.registerEditorSuggest(new DirectiveSuggest(this.app, this.registry))
@@ -211,16 +215,18 @@ export default class ObsidianDirectivesPlugin extends Plugin
     }
 
     // ── Warnings ────────────────────────────────────────────────────────────
-    if (BUILTIN_NAMES.has(handler.name)) {
-      console.warn(
-        `[obsidian-directives] Handler "${handler.name}" overrides a built-in handler. ` +
-        'This is allowed but may produce unexpected behaviour.',
-      )
-    } else if (this.registry.has(handler.name)) {
-      console.warn(
-        `[obsidian-directives] A handler named "${handler.name}" is already registered ` +
-        'and will be replaced.',
-      )
+    if (this.registry.has(handler.name)) {
+      if (BUILTIN_NAMES.has(handler.name)) {
+        console.warn(
+          `[obsidian-directives] Handler "${handler.name}" overrides a built-in handler. ` +
+          'This is allowed but may produce unexpected behaviour.',
+        )
+      } else {
+        console.warn(
+          `[obsidian-directives] A handler named "${handler.name}" is already registered ` +
+          'and will be replaced.',
+        )
+      }
     }
 
     // ── Register ────────────────────────────────────────────────────────────

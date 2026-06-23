@@ -31,7 +31,7 @@ import {
   ViewUpdate,
   WidgetType,
 } from '@codemirror/view'
-import { EditorState, RangeSetBuilder, StateField, Transaction } from '@codemirror/state'
+import { EditorSelection, EditorState, RangeSetBuilder, StateField, Transaction } from '@codemirror/state'
 import type { Extension } from '@codemirror/state'
 
 import type { ParsedDirective } from '../types'
@@ -308,5 +308,42 @@ export function createDirectiveExtension(registry: DirectiveRegistry): Extension
     { decorations: (v) => v.decorations },
   )
 
-  return [directivesField, eventBusField, blockField, inlinePlugin]
+  // TransactionFilter: when a selection-only transaction skips over a directive block
+  // (cursor was on the line immediately before/after it and jumped past), redirect to d.from.
+  // This runs inside CM6's state machine so it can't be bypassed by Obsidian's event layer.
+  const directiveNavFilter = EditorState.transactionFilter.of(tr => {
+    if (!tr.selection || tr.docChanged) return tr
+
+    const oldHead = tr.startState.selection.main.head
+    const newHead = tr.selection.main.head
+    if (oldHead === newHead) return tr
+
+    const directives = tr.startState.field(directivesField, false)
+    if (!directives) return tr
+
+    const doc      = tr.startState.doc
+    const oldLine  = doc.lineAt(oldHead).number
+    const newLine  = doc.lineAt(newHead).number
+
+    for (const d of directives) {
+      if (d.type === 'text') continue
+      if (registry.get(d.name)?.decorateInPlace) continue
+      if (cursorOverlaps(tr.startState, d.from, d.to)) continue
+
+      const dFromLine = doc.lineAt(d.from).number
+      const dToLine   = doc.lineAt(d.to).number
+
+      // Skipped down: was on line just above directive, landed after it
+      const skippedDown = oldLine === dFromLine - 1 && newLine > dToLine
+      // Skipped up: was on line just below directive, landed before it
+      const skippedUp   = oldLine === dToLine + 1   && newLine < dFromLine
+
+      if (skippedDown || skippedUp) {
+        return { selection: EditorSelection.cursor(d.from) }
+      }
+    }
+    return tr
+  })
+
+  return [directivesField, eventBusField, blockField, inlinePlugin, directiveNavFilter]
 }
