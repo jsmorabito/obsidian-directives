@@ -239,7 +239,7 @@ export class AddToLogModal extends FuzzySuggestModal<TFile> {
   renderSuggestion(item: { item: TFile }, el: HTMLElement): void {
     const row = el.createDiv({ cls: 'add-to-log-suggestion' })
     const icon = row.createSpan({ cls: 'add-to-log-suggestion-icon' })
-    setIcon(icon, 'scroll-text')
+    setIcon(icon, 'logs')
     row.createSpan({ text: item.item.path.replace(/\.md$/, '') })
   }
 
