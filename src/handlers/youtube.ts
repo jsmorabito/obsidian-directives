@@ -38,7 +38,7 @@
  * Spec: §4.4 and §9.4
  */
 
-import { requestUrl } from 'obsidian'
+import { App, Modal, Setting, requestUrl } from 'obsidian'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 
@@ -286,6 +286,53 @@ function parseTimedTextXml(text: string): TranscriptLine[] {
 }
 
 // ---------------------------------------------------------------------------
+// URL input modal
+// ---------------------------------------------------------------------------
+
+class YouTubeUrlModal extends Modal {
+  private input!: HTMLInputElement
+
+  constructor(
+    app: App,
+    private readonly onConfirm: (url: string) => void,
+  ) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText('Set YouTube URL')
+    const { contentEl } = this
+
+    new Setting(contentEl)
+      .setName('URL or video ID')
+      .addText(text => {
+        this.input = text.inputEl
+        text.setPlaceholder('https://youtu.be/dQw4w9WgXcQ')
+        this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter') this.confirm()
+          if (e.key === 'Escape') this.close()
+        })
+      })
+
+    new Setting(contentEl)
+      .addButton(btn => btn.setButtonText('Set').setCta().onClick(() => this.confirm()))
+
+    setTimeout(() => this.input.focus(), 50)
+  }
+
+  private confirm(): void {
+    const val = this.input.value.trim()
+    if (!val) return
+    this.close()
+    this.onConfirm(val)
+  }
+
+  onClose(): void {
+    this.contentEl.empty()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // YouTubeWidget
 // ---------------------------------------------------------------------------
 
@@ -295,6 +342,7 @@ class YouTubeWidget extends DirectiveWidget {
   constructor(
     private readonly directive: ParsedDirective,
     private readonly bus: EventBus,
+    private readonly app: App,
   ) {
     super()
   }
@@ -696,14 +744,11 @@ class YouTubeWidget extends DirectiveWidget {
     btn.textContent = 'Set URL'
     btn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     btn.addEventListener('click', () => {
-      const input = activeDocument.defaultView?.prompt('YouTube URL or video ID:')
-      if (!input) return
-      const vid = parseVideoId(input.trim())
-      if (!vid) {
-        activeDocument.defaultView?.alert(`Could not parse a YouTube video ID from: "${input}"`)
-        return
-      }
-      this.setVid(view, vid)
+      new YouTubeUrlModal(this.app, (input) => {
+        const vid = parseVideoId(input)
+        if (!vid) return
+        this.setVid(view, vid)
+      }).open()
     })
 
     row.appendChild(icon)
@@ -754,13 +799,13 @@ class YouTubeWidget extends DirectiveWidget {
  * Create the YouTube directive handler.
  * Call once in plugin onload() and register via plugin.addHandler().
  */
-export function createYouTubeHandler(): DirectiveHandler {
+export function createYouTubeHandler(app: App): DirectiveHandler {
   return {
     name: 'youtube',
 
     render(directive: ParsedDirective, state: EditorState): DirectiveWidget {
       const bus = state.field(eventBusField)
-      return new YouTubeWidget(directive, bus)
+      return new YouTubeWidget(directive, bus, app)
     },
   }
 }

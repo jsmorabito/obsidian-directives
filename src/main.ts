@@ -61,7 +61,7 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.addHandler(createAudioHandler(this.app))
     this.addHandler(createChordsHandler(this.settings))
     this.addHandler(createTabHandler(this.settings))
-    this.addHandler(createYouTubeHandler())
+    this.addHandler(createYouTubeHandler(this.app))
     this.addHandler(createLogHandler(this.app, this.settings))
     this.addHandler(createChecklistHandler(this.app))
     this.addHandler(createAggregatorHandler(this.app))
