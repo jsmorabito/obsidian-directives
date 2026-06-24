@@ -25,6 +25,18 @@ export const API_VERSION = '1.0.0'
 /** Directive names claimed by built-in handlers. */
 const BUILTIN_NAMES = new Set(['audio', 'chords', 'tab', 'youtube', 'log', 'checklist', 'aggregator'])
 
+/**
+ * Merge saved data with defaults and apply any schema migrations needed.
+ * Add a new `case` block here whenever DEFAULT_SETTINGS._version increments
+ * and the upgrade requires a data transform (not just a new default field).
+ */
+function migrateSettings(raw: Partial<DirectivesSettings> & { _version?: number }): DirectivesSettings {
+  const settings: DirectivesSettings = Object.assign({}, DEFAULT_SETTINGS, raw)
+  // Ensure _version is always current so the next migration check is accurate.
+  settings._version = DEFAULT_SETTINGS._version
+  return settings
+}
+
 /** Pattern a valid directive name must match. */
 const VALID_NAME = /^[a-z][a-z0-9-]*$/
 
@@ -49,11 +61,13 @@ export default class ObsidianDirectivesPlugin extends Plugin
   private logViewButtons = new WeakMap<MarkdownView, HTMLElement>()
   private openLogPopover: ViewLogPopover | null = null
   private fontStyleEl: HTMLStyleElement | null = null
+  /** Paths of vault files known to contain at least one :::log block. */
+  private logFileCache = new Set<string>()
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<DirectivesSettings>)
+    this.settings = migrateSettings(await this.loadData() as Partial<DirectivesSettings> & { _version?: number })
 
     this.registry = new DirectiveRegistry()
 
@@ -69,22 +83,29 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.registerEditorExtension(createDirectiveExtension(this.registry))
     this.registerEditorSuggest(new DirectiveSuggest(this.app, this.registry))
 
+    // Populate the log-file cache on layout ready, then keep it current.
+    this.app.workspace.onLayoutReady(() => void this.rebuildLogFileCache())
+    this.registerEvent(this.app.vault.on('modify', (file) => {
+      if (file instanceof TFile && file.extension === 'md') void this.updateLogFileCacheEntry(file)
+    }))
+    this.registerEvent(this.app.vault.on('create', (file) => {
+      if (file instanceof TFile && file.extension === 'md') void this.updateLogFileCacheEntry(file)
+    }))
+    this.registerEvent(this.app.vault.on('delete', (file) => {
+      if (file instanceof TFile) this.logFileCache.delete(file.path)
+    }))
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+      this.logFileCache.delete(oldPath)
+      if (file instanceof TFile && file.extension === 'md') void this.updateLogFileCacheEntry(file)
+    }))
+
     this.addCommand({
       id: 'add-to-log',
       name: 'Add to log',
-      callback: async () => {
-        // Scan all vault files for :::log blocks before opening the modal so
-        // getItems() has the complete filtered list from the start.
-        const allFiles = this.app.vault.getMarkdownFiles()
-        const logFiles = (
-          await Promise.all(
-            allFiles.map(async f => {
-              const text = await this.app.vault.cachedRead(f)
-              return /^:::log/m.test(text) ? f : null
-            }),
-          )
-        ).filter((f): f is TFile => f !== null)
-
+      callback: () => {
+        const logFiles = Array.from(this.logFileCache)
+          .map(p => this.app.vault.getAbstractFileByPath(p))
+          .filter((f): f is TFile => f instanceof TFile)
         new AddToLogModal(this.app, this.settings, logFiles).open()
       },
     })
@@ -100,6 +121,26 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
     this.applyFontSettings()
     this.addSettingTab(new DirectivesSettingTab(this.app, this))
+  }
+
+  private async rebuildLogFileCache(): Promise<void> {
+    this.logFileCache.clear()
+    await Promise.all(
+      this.app.vault.getMarkdownFiles().map(f => this.updateLogFileCacheEntry(f)),
+    )
+  }
+
+  private async updateLogFileCacheEntry(file: TFile): Promise<void> {
+    try {
+      const text = await this.app.vault.cachedRead(file)
+      if (/^:::log/m.test(text)) {
+        this.logFileCache.add(file.path)
+      } else {
+        this.logFileCache.delete(file.path)
+      }
+    } catch {
+      this.logFileCache.delete(file.path)
+    }
   }
 
   onunload(): void {

@@ -29,6 +29,8 @@ import { EditorState } from '@codemirror/state'
 
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
+import { parseWhere, matchesFrontmatter, resolveFile, debounce } from '../core/utils'
+import type { WhereCondition } from '../core/utils'
 
 // ---------------------------------------------------------------------------
 // Task model
@@ -64,7 +66,7 @@ const TASK_LINE_RE = /^- \[([ xX])\] (.*)/
 const DIRECTIVE_OPEN_RE = /^:{3,}([a-zA-Z][\w-]*)(?:\[([^\]]*)\])?/
 const DIRECTIVE_CLOSE_RE = /^:{3,}\s*$/
 
-function parseTasks(content: string, sourcePath: string | null): Task[] {
+export function parseTasks(content: string, sourcePath: string | null): Task[] {
   const tasks: Task[] = []
   let offset = 0
   let lineNumber = 0
@@ -114,21 +116,10 @@ function parseTasks(content: string, sourcePath: string | null): Task[] {
 
 type FilterMode = 'todo' | 'done' | 'all'
 
-function applyFilter(tasks: Task[], filter: FilterMode): Task[] {
+export function applyFilter(tasks: Task[], filter: FilterMode): Task[] {
   if (filter === 'todo') return tasks.filter(t => !t.checked)
   if (filter === 'done') return tasks.filter(t => t.checked)
   return tasks
-}
-
-// ---------------------------------------------------------------------------
-// File resolution
-// ---------------------------------------------------------------------------
-
-function resolveFile(src: string, app: App): TFile | null {
-  if (!src.trim()) return null
-  const byPath = app.vault.getAbstractFileByPath(src.trim())
-  if (byPath instanceof TFile) return byPath
-  return app.metadataCache.getFirstLinkpathDest(src.trim(), '') ?? null
 }
 
 // ---------------------------------------------------------------------------
@@ -171,46 +162,6 @@ function setDirectiveAttr(
 
   view.dispatch({
     changes: { from: braceFrom, to: braceTo, insert: inner ? `{${inner}}` : '' },
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Where-clause frontmatter filtering
-// ---------------------------------------------------------------------------
-
-interface WhereCondition {
-  key: string
-  values: string[] // OR'd — file matches if frontmatter[key] matches any value
-}
-
-/**
- * Parse `where="key=val, key2=a|b"` into conditions.
- * Each comma-separated term is `key=value` or `key=a|b`.
- */
-function parseWhere(whereAttr: string): WhereCondition[] {
-  if (!whereAttr.trim()) return []
-  return whereAttr.split(',').flatMap(term => {
-    const eq = term.indexOf('=')
-    if (eq === -1) return []
-    const key    = term.slice(0, eq).trim()
-    const values = term.slice(eq + 1).split('|').map(v => v.trim().toLowerCase())
-    return key ? [{ key, values }] : []
-  })
-}
-
-function matchesFrontmatter(
-  frontmatter: Record<string, unknown> | null | undefined,
-  conditions: WhereCondition[],
-): boolean {
-  if (!conditions.length) return true
-  if (!frontmatter) return false
-  return conditions.every(({ key, values }) => {
-    const raw = frontmatter[key]
-    if (raw == null) return false
-    const candidates = Array.isArray(raw)
-      ? raw.map(v => String(v).toLowerCase())
-      : [String(raw).toLowerCase()]
-    return values.some(v => candidates.includes(v))
   })
 }
 
@@ -476,7 +427,7 @@ class ChecklistWidget extends DirectiveWidget {
     const groupBtn = activeDocument.createElement('button')
     groupBtn.className = 'clickable-icon directive-checklist__action-btn'
     groupBtn.setAttribute('aria-label', grouped ? 'Ungroup tasks' : 'Group by source')
-    setIcon(groupBtn, grouped ? 'layers' : 'layers')
+    setIcon(groupBtn, grouped ? 'layers' : 'list')
     groupBtn.classList.toggle('is-active', grouped)
     groupBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     groupBtn.addEventListener('click', () => {
@@ -800,10 +751,10 @@ class ChecklistWidget extends DirectiveWidget {
     this.cleanups.push(() => this.app.vault.offref(modRef))
     if (hasTagSource) {
       // Re-aggregate when any file's metadata changes — a newly tagged file
-      // may not be in watchedPaths yet.
-      const cacheRef = this.app.metadataCache.on('changed', () => {
-        void this.buildContent(wrap, view)
-      })
+      // may not be in watchedPaths yet. Debounced to avoid rapid rebuilds
+      // during vault indexing bursts.
+      const debouncedRebuild = debounce(() => { void this.buildContent(wrap, view) }, 300)
+      const cacheRef = this.app.metadataCache.on('changed', debouncedRebuild)
       this.cleanups.push(() => this.app.metadataCache.offref(cacheRef))
     }
   }
@@ -944,11 +895,12 @@ class ChecklistWidget extends DirectiveWidget {
       }
     }
 
-    input.addEventListener('blur', () => { void commit() })
+    let cancelled = false
+    input.addEventListener('blur', () => { if (!cancelled) void commit() })
     input.addEventListener('keydown', (e: KeyboardEvent) => {
       e.stopPropagation()
       if (e.key === 'Enter') { e.preventDefault(); void commit() }
-      if (e.key === 'Escape') { void this.buildContent(wrap, view) }
+      if (e.key === 'Escape') { cancelled = true; void this.buildContent(wrap, view) }
     })
   }
 

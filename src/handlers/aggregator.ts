@@ -31,6 +31,9 @@ import { EditorState } from '@codemirror/state'
 
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
+import { parseWhere, matchesFrontmatter, resolveFile, debounce } from '../core/utils'
+import type { WhereCondition } from '../core/utils'
+import { parseAttributes } from '../core/parser'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -69,7 +72,7 @@ function isExcluded(text: string, notTagRes: RegExp[]): boolean {
 
 type FilterMode = 'all' | 'hide-done' | 'only-done'
 
-function applyFilter(lines: AggLine[], filter: FilterMode): AggLine[] {
+export function applyFilter(lines: AggLine[], filter: FilterMode): AggLine[] {
   if (filter === 'hide-done') return lines.filter(l => !isDone(l.text))
   if (filter === 'only-done') return lines.filter(l =>  isDone(l.text))
   return lines
@@ -97,7 +100,7 @@ interface TabDef {
 
 const TAB_LINE_RE = /^::tab(?:\[([^\]]*)\])?(?:\{([^}]*)\})?/
 
-function parseTabDefs(body: string): TabDef[] {
+export function parseTabDefs(body: string): TabDef[] {
   const tabs: TabDef[] = []
   for (const line of body.split('\n')) {
     const m = TAB_LINE_RE.exec(line.trim())
@@ -111,69 +114,6 @@ function parseTabDefs(body: string): TabDef[] {
 }
 
 // ---------------------------------------------------------------------------
-// Attribute parser (mirrors core/parser.ts — duplicated to avoid coupling)
-// ---------------------------------------------------------------------------
-
-function parseAttributes(raw: string): Record<string, string> {
-  const attrs: Record<string, string> = {}
-  if (!raw.trim()) return attrs
-  const TOKEN_RE =
-    /([a-zA-Z][\w-]*)=(?:"([^"]*)"|'([^']*)'|(\S+))|#([\w-]+)|\.([a-zA-Z][\w-]*)|([a-zA-Z][\w-]*)/g
-  let m: RegExpExecArray | null
-  while ((m = TOKEN_RE.exec(raw)) !== null) {
-    if      (m[1] !== undefined) attrs[m[1]] = m[2] ?? m[3] ?? m[4] ?? ''
-    else if (m[5] !== undefined) attrs['id'] = m[5]
-    else if (m[6] !== undefined) { const p = attrs['class']; attrs['class'] = p ? `${p} ${m[6]}` : m[6] }
-    else if (m[7] !== undefined) attrs[m[7]] = ''
-  }
-  return attrs
-}
-
-// ---------------------------------------------------------------------------
-// Frontmatter filtering
-// ---------------------------------------------------------------------------
-
-interface WhereCondition { key: string; values: string[] }
-
-function parseWhere(whereAttr: string): WhereCondition[] {
-  if (!whereAttr.trim()) return []
-  return whereAttr.split(',').flatMap(term => {
-    const eq = term.indexOf('=')
-    if (eq === -1) return []
-    const key    = term.slice(0, eq).trim()
-    const values = term.slice(eq + 1).split('|').map(v => v.trim().toLowerCase())
-    return key ? [{ key, values }] : []
-  })
-}
-
-function matchesFrontmatter(
-  frontmatter: Record<string, unknown> | null | undefined,
-  conditions: WhereCondition[],
-): boolean {
-  if (!conditions.length) return true
-  if (!frontmatter) return false
-  return conditions.every(({ key, values }) => {
-    const raw = frontmatter[key]
-    if (raw == null) return false
-    const candidates = Array.isArray(raw)
-      ? raw.map(v => String(v).toLowerCase())
-      : [String(raw).toLowerCase()]
-    return values.some(v => candidates.includes(v))
-  })
-}
-
-// ---------------------------------------------------------------------------
-// File resolution
-// ---------------------------------------------------------------------------
-
-function resolveFile(src: string, app: App): TFile | null {
-  if (!src.trim()) return null
-  const byPath = app.vault.getAbstractFileByPath(src.trim())
-  if (byPath instanceof TFile) return byPath
-  return app.metadataCache.getFirstLinkpathDest(src.trim(), '') ?? null
-}
-
-// ---------------------------------------------------------------------------
 // Line collection
 // ---------------------------------------------------------------------------
 
@@ -183,7 +123,7 @@ function tagRegex(tag: string): RegExp {
   return new RegExp(`${escaped}(?=[\\s,;.!?\\])]|$)`, 'i')
 }
 
-function collectMatchingLines(content: string, sourcePath: string, re: RegExp): AggLine[] {
+export function collectMatchingLines(content: string, sourcePath: string, re: RegExp): AggLine[] {
   const lines: AggLine[] = []
   let offset = 0
   let lineNumber = 0
@@ -407,7 +347,6 @@ class AggregatorWidget extends DirectiveWidget {
     if (tabs.length > 0) {
       await this.buildTabbed(wrap, view, tabs)
     } else {
-      this.currentPage = 0
       await this.buildSingle(wrap, view)
     }
   }
@@ -786,7 +725,8 @@ class AggregatorWidget extends DirectiveWidget {
     const modRef = this.app.vault.on('modify', onModify)
     this.cleanups.push(() => this.app.vault.offref(modRef))
     if (hasTagSource) {
-      const cacheRef = this.app.metadataCache.on('changed', rebuild)
+      const debouncedRebuild = debounce(rebuild, 300)
+      const cacheRef = this.app.metadataCache.on('changed', debouncedRebuild)
       this.cleanups.push(() => this.app.metadataCache.offref(cacheRef))
     }
   }

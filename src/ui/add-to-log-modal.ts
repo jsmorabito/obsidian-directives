@@ -18,37 +18,13 @@ import {
   setIcon,
 } from 'obsidian'
 import type { DirectivesSettings } from '../settings'
+import { DATE_RE, extractDate, todayISO, buildDateLine } from '../core/utils'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-const DATE_RE =
-  /^(?:-|#{1,6})\s+(?:\[\[(?:[^\]|]*\/)?(\d{4}-\d{2}-\d{2})[^\]]*\]\]|(\d{4}-\d{2}-\d{2}))\s*$/
-
 const LOG_OPEN_RE = /^:::log[^\n]*$/m
-
-function extractDate(match: RegExpExecArray): string {
-  return match[1] ?? match[2] ?? ''
-}
-
-function todayISO(): string {
-  const d = new Date()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
-
-function buildDateLine(dateISO: string, settings: DirectivesSettings): string {
-  const prefix = settings.logDateHeadingLevel > 0
-    ? '#'.repeat(settings.logDateHeadingLevel)
-    : '-'
-  if (settings.logDateStyle === 'wikilink') {
-    const fmt = settings.logDateFormat || '{{date}}'
-    return `${prefix} [[${fmt.replace('{{date}}', dateISO)}]]`
-  }
-  return `${prefix} ${dateISO}`
-}
 
 // ---------------------------------------------------------------------------
 // Core insertion logic
@@ -190,7 +166,7 @@ class LogEntryModal extends Modal {
       if (e.key === 'Escape') this.close()
     })
 
-    setTimeout(() => this.dateInput.focus(), 50)
+    requestAnimationFrame(() => this.noteInput.focus())
   }
 
   private confirm(): void {

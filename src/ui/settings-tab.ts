@@ -31,6 +31,7 @@ export class DirectivesSettingTab extends PluginSettingTab {
         text.setPlaceholder('e.g. New York').setValue(get())
         currentText = get()
         text.inputEl.addEventListener('input', () => { currentText = text.inputEl.value })
+        text.inputEl.addEventListener('blur', async () => { await set(currentText) })
         text.inputEl.addEventListener('keydown', async (e: KeyboardEvent) => {
           if (e.key === 'Enter') await set(currentText)
         })

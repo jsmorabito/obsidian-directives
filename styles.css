@@ -1095,6 +1095,34 @@
   line-height: 1;
 }
 
+/* ── Checklist pagination ────────────────────────────────────────────────── */
+
+.directive-checklist__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0 2px;
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 4px;
+}
+
+.directive-checklist__page-label {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  min-width: 48px;
+  text-align: center;
+}
+
+.directive-checklist__page-btn {
+  color: var(--text-muted);
+}
+
+.directive-checklist__page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* ── Aggregator ──────────────────────────────────────────────────────────── */
 
 .directive-widget--aggregator {

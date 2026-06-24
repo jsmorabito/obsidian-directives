@@ -15,17 +15,11 @@ import { foldEffect, unfoldEffect, foldedRanges, foldService } from '@codemirror
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
 import type { DirectivesSettings } from '../settings'
+import { DATE_RE, extractDate, todayISO, buildDateLine } from '../core/utils'
 
 // ---------------------------------------------------------------------------
 // Body parser
 // ---------------------------------------------------------------------------
-
-const DATE_RE =
-  /^(?:-|#{1,6})\s+(?:\[\[(?:[^\]|]*\/)?(\d{4}-\d{2}-\d{2})[^\]]*\]\]|(\d{4}-\d{2}-\d{2}))\s*$/
-
-function extractDate(match: RegExpExecArray): string {
-  return match[1] ?? match[2] ?? ''
-}
 
 export interface LogEntry {
   date: string
@@ -53,14 +47,6 @@ export function parseLogBody(body: string): LogEntry[] {
   }
 
   return entries
-}
-
-function todayISO(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 // ---------------------------------------------------------------------------
@@ -130,19 +116,6 @@ export function insertNewEntry(
     selection: { anchor: absPos + toInsert.length - 1 },
   })
   view.focus()
-}
-
-function buildDateLine(dateISO: string, settings: DirectivesSettings): string {
-  const prefix = settings.logDateHeadingLevel > 0
-    ? '#'.repeat(settings.logDateHeadingLevel)
-    : '-'
-
-  if (settings.logDateStyle === 'wikilink') {
-    const fmt = settings.logDateFormat || '{{date}}'
-    const target = fmt.replace('{{date}}', dateISO)
-    return `${prefix} [[${target}]]`
-  }
-  return `${prefix} ${dateISO}`
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +258,13 @@ function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Search state — persisted across widget rebuilds keyed by directive position
+// ---------------------------------------------------------------------------
+
+interface SearchState { query: string; open: boolean }
+const searchStateMap = new Map<number, SearchState>()
+
+// ---------------------------------------------------------------------------
 // LogActionsWidget — inline at end of the opening fence line
 // ---------------------------------------------------------------------------
 
@@ -297,11 +277,13 @@ class LogActionsWidget extends WidgetType {
   }
 
   eq(other: WidgetType): boolean {
-    return (
-      other instanceof LogActionsWidget &&
-      other.directive.from === this.directive.from &&
-      other.directive.body === this.directive.body
-    )
+    if (!(other instanceof LogActionsWidget)) return false
+    if (other.directive.from !== this.directive.from) return false
+    if (other.directive.body !== this.directive.body) return false
+    // Also re-render if search state changed so the open/closed class is correct.
+    const state = searchStateMap.get(this.directive.from)
+    const otherState = searchStateMap.get(other.directive.from)
+    return state?.open === otherState?.open && state?.query === otherState?.query
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -335,8 +317,10 @@ class LogActionsWidget extends WidgetType {
 
     const foldBtn = activeDocument.createElement('button')
     foldBtn.className = 'clickable-icon directive-log-actions-btn'
-    foldBtn.setAttribute('aria-label', 'Collapse all log entries')
-    setIcon(foldBtn, 'chevrons-down-up')
+    // Sync initial icon to actual fold state so it's correct after a widget rebuild.
+    const initiallyFolded = anyFolded(view, this.directive)
+    setIcon(foldBtn, initiallyFolded ? 'chevrons-up-down' : 'chevrons-down-up')
+    foldBtn.setAttribute('aria-label', initiallyFolded ? 'Expand all log entries' : 'Collapse all log entries')
     foldBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     foldBtn.addEventListener('click', () => {
       const didCollapse = toggleFoldAll(view, this.directive)
@@ -344,11 +328,19 @@ class LogActionsWidget extends WidgetType {
       foldBtn.setAttribute('aria-label', didCollapse ? 'Expand all log entries' : 'Collapse all log entries')
     })
 
-    // Search — button always visible, input slides open beside it
+    // Search — button always visible, input slides open beside it.
+    // State (query + open) is persisted in searchStateMap across widget rebuilds.
+    const savedSearch = searchStateMap.get(this.directive.from) ?? { query: '', open: false }
+
     const searchInput = activeDocument.createElement('input')
     searchInput.type = 'text'
     searchInput.placeholder = 'Search…'
     searchInput.className = 'directive-log-search-input'
+    if (savedSearch.open) searchInput.classList.add('is-open')
+    if (savedSearch.query) {
+      searchInput.value = savedSearch.query
+      applySearchFilter(view, this.directive, savedSearch.query)
+    }
     searchInput.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     searchInput.addEventListener('keydown', (e: KeyboardEvent) => {
       e.stopPropagation()
@@ -357,10 +349,12 @@ class LogActionsWidget extends WidgetType {
         applySearchFilter(view, this.directive, '')
         searchInput.classList.remove('is-open')
         searchInput.blur()
+        searchStateMap.set(this.directive.from, { query: '', open: false })
       }
     })
     searchInput.addEventListener('input', () => {
       applySearchFilter(view, this.directive, searchInput.value)
+      searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
     })
 
     const searchBtn = activeDocument.createElement('button')
@@ -372,9 +366,11 @@ class LogActionsWidget extends WidgetType {
       const isOpen = searchInput.classList.toggle('is-open')
       if (isOpen) {
         searchInput.focus()
+        searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
       } else {
         searchInput.value = ''
         applySearchFilter(view, this.directive, '')
+        searchStateMap.set(this.directive.from, { query: '', open: false })
       }
     })
 
