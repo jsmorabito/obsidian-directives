@@ -330,7 +330,7 @@ class YouTubeWidget extends DirectiveWidget {
     // Error state — video ID missing or unparseable
     if (!vid) {
       wrap.classList.add('directive-widget--youtube-error')
-      wrap.appendChild(this.buildError(vidAttr))
+      wrap.appendChild(this.buildError(vidAttr, view))
       return wrap
     }
 
@@ -677,7 +677,7 @@ class YouTubeWidget extends DirectiveWidget {
 
   // ── Error state ────────────────────────────────────────────────────────
 
-  private buildError(raw: string): HTMLElement {
+  private buildError(raw: string, view: EditorView): HTMLElement {
     const row = activeDocument.createElement('div')
     row.className = 'directive-widget--error'
 
@@ -691,9 +691,51 @@ class YouTubeWidget extends DirectiveWidget {
       ? `Could not parse YouTube video ID: "${raw}"`
       : 'Missing vid attribute'
 
+    const btn = activeDocument.createElement('button')
+    btn.className   = 'directive-youtube-set-url-btn'
+    btn.textContent = 'Set URL'
+    btn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    btn.addEventListener('click', () => {
+      const input = activeDocument.defaultView?.prompt('YouTube URL or video ID:')
+      if (!input) return
+      const vid = parseVideoId(input.trim())
+      if (!vid) {
+        activeDocument.defaultView?.alert(`Could not parse a YouTube video ID from: "${input}"`)
+        return
+      }
+      this.setVid(view, vid)
+    })
+
     row.appendChild(icon)
     row.appendChild(msg)
+    row.appendChild(btn)
     return row
+  }
+
+  /** Patch the directive source to set (or replace) the vid attribute. */
+  private setVid(view: EditorView, vid: string): void {
+    const raw   = view.state.doc.sliceString(this.directive.from, this.directive.to)
+    const lines = raw.split('\n')
+    const first = lines[0] ?? ''
+
+    // Does the opening line already have an attribute block?
+    const attrBlockRe = /\{([^}]*)\}/
+    let newFirst: string
+    if (attrBlockRe.test(first)) {
+      // Replace or insert vid= inside the existing {}
+      newFirst = first.replace(attrBlockRe, (_, inner: string) => {
+        const cleaned = inner.replace(/\b(?:vid|src)="[^"]*"/, '').replace(/\b(?:vid|src)=[^\s}]*/, '').trim()
+        return `{${cleaned ? cleaned + ' ' : ''}vid="${vid}"}`
+      })
+    } else {
+      // Append an attribute block after the name/label
+      newFirst = first.trimEnd() + `{vid="${vid}"}`
+    }
+
+    const newSource = [newFirst, ...lines.slice(1)].join('\n')
+    view.dispatch({
+      changes: { from: this.directive.from, to: this.directive.to, insert: newSource },
+    })
   }
 
   // ── Cleanup ────────────────────────────────────────────────────────────

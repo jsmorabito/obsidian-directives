@@ -161,6 +161,17 @@
   font-size: var(--font-ui-small);
 }
 
+.directive-youtube-set-url-btn {
+  margin-left: auto;
+  font-size: var(--font-ui-small);
+  padding: 2px 8px;
+  cursor: pointer;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: var(--radius-s);
+}
+
 /* --------------------------------------------------------------------------
    Tab widget — monospace tab display
    -------------------------------------------------------------------------- */
