@@ -23,7 +23,7 @@
  *   - When a watched source file changes externally the list refreshes.
  */
 
-import { App, TAbstractFile, TFile, setIcon } from 'obsidian'
+import { AbstractInputSuggest, App, Menu, Modal, Setting, TAbstractFile, TFile, prepareFuzzySearch, setIcon } from 'obsidian'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 
@@ -300,11 +300,97 @@ function addSourcePath(view: EditorView, directive: ParsedDirective, newPath: st
 }
 
 // ---------------------------------------------------------------------------
+// Fuzzy file suggest for the source input
+// ---------------------------------------------------------------------------
+
+class FileSuggest extends AbstractInputSuggest<TFile> {
+  constructor(
+    app: App,
+    inputEl: HTMLInputElement,
+    private readonly onChoose: (file: TFile) => void,
+  ) {
+    super(app, inputEl)
+  }
+
+  getSuggestions(query: string): TFile[] {
+    const fuzzy = prepareFuzzySearch(query)
+    return this.app.vault.getMarkdownFiles()
+      .filter(f => fuzzy(f.path) !== null)
+      .sort((a, b) => {
+        const sa = fuzzy(a.path)?.score ?? -Infinity
+        const sb = fuzzy(b.path)?.score ?? -Infinity
+        return sb - sa
+      })
+      .slice(0, 20)
+  }
+
+  renderSuggestion(file: TFile, el: HTMLElement): void {
+    el.createDiv({ cls: 'suggestion-title', text: file.basename })
+    if (file.parent && file.parent.path !== '/') {
+      el.createDiv({ cls: 'suggestion-note', text: file.parent.path })
+    }
+  }
+
+  selectSuggestion(file: TFile): void {
+    this.close()
+    this.onChoose(file)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single-field prompt modal (shared by menu actions)
+// ---------------------------------------------------------------------------
+
+class PromptModal extends Modal {
+  private input!: HTMLInputElement
+
+  constructor(
+    app: App,
+    private readonly title: string,
+    private readonly label: string,
+    private readonly placeholder: string,
+    private readonly initial: string,
+    private readonly onConfirm: (value: string) => void,
+  ) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(this.title)
+    const { contentEl } = this
+
+    new Setting(contentEl)
+      .setName(this.label)
+      .addText(text => {
+        this.input = text.inputEl
+        text.setPlaceholder(this.placeholder)
+        text.setValue(this.initial)
+        this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter') this.confirm()
+          if (e.key === 'Escape') this.close()
+        })
+      })
+
+    new Setting(contentEl)
+      .addButton(btn => btn.setButtonText('Apply').setCta().onClick(() => this.confirm()))
+  }
+
+  private confirm(): void {
+    const val = this.input.value.trim()
+    this.close()
+    if (val) this.onConfirm(val)
+  }
+
+  onClose(): void { this.contentEl.empty() }
+}
+
+// ---------------------------------------------------------------------------
 // ChecklistWidget
 // ---------------------------------------------------------------------------
 
 class ChecklistWidget extends DirectiveWidget {
   private cleanups: Array<() => void> = []
+  private page = 0
 
   constructor(
     private readonly directive: ParsedDirective,
@@ -316,12 +402,13 @@ class ChecklistWidget extends DirectiveWidget {
   eq(other: ChecklistWidget): boolean {
     if (!(other instanceof ChecklistWidget)) return false
     return (
-      this.directive.attributes['from']   === other.directive.attributes['from'] &&
-      this.directive.attributes['filter'] === other.directive.attributes['filter'] &&
-      this.directive.attributes['group']  === other.directive.attributes['group'] &&
-      this.directive.attributes['where']  === other.directive.attributes['where'] &&
-      this.directive.body                 === other.directive.body &&
-      this.directive.label                === other.directive.label
+      this.directive.attributes['from']     === other.directive.attributes['from'] &&
+      this.directive.attributes['filter']   === other.directive.attributes['filter'] &&
+      this.directive.attributes['group']    === other.directive.attributes['group'] &&
+      this.directive.attributes['where']    === other.directive.attributes['where'] &&
+      this.directive.attributes['pageSize'] === other.directive.attributes['pageSize'] &&
+      this.directive.body                   === other.directive.body &&
+      this.directive.label                  === other.directive.label
     )
   }
 
@@ -429,17 +516,15 @@ class ChecklistWidget extends DirectiveWidget {
       sourceBtn.style.display = 'none'
       const input = activeDocument.createElement('input')
       input.type        = 'text'
-      input.placeholder = 'Note name or path…'
+      input.placeholder = 'Search notes…'
       input.className   = 'directive-checklist__edit-input directive-checklist__source-input'
       input.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
       input.addEventListener('keydown', (e: KeyboardEvent) => {
         e.stopPropagation()
-        if (e.key === 'Enter') { addSourcePath(view, this.directive, input.value); return }
-        if (e.key === 'Escape') { void this.buildContent(wrap, view) }
+        if (e.key === 'Escape') { suggest.close(); void this.buildContent(wrap, view) }
       })
-      input.addEventListener('blur', () => {
-        if (input.value.trim()) addSourcePath(view, this.directive, input.value)
-        else void this.buildContent(wrap, view)
+      const suggest = new FileSuggest(this.app, input, (file) => {
+        addSourcePath(view, this.directive, file.path)
       })
       actions.insertBefore(input, sourceBtn)
       input.focus()
@@ -453,6 +538,99 @@ class ChecklistWidget extends DirectiveWidget {
     addBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     addBtn.addEventListener('click', () => this.insertInlineTask(view))
     actions.appendChild(addBtn)
+
+    // 3-dots menu for less-common options
+    const moreBtn = activeDocument.createElement('button')
+    moreBtn.className = 'clickable-icon directive-checklist__action-btn'
+    moreBtn.setAttribute('aria-label', 'More options')
+    setIcon(moreBtn, 'more-horizontal')
+    moreBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    moreBtn.addEventListener('click', (e: MouseEvent) => {
+      const menu = new Menu()
+
+      const currentPageSize = this.directive.attributes['pageSize'] ?? ''
+      menu.addItem(item =>
+        item
+          .setTitle(currentPageSize ? `Page size: ${currentPageSize}` : 'Set page size…')
+          .setIcon('list-ordered')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Set page size',
+              'Tasks per page',
+              'e.g. 10',
+              currentPageSize,
+              val => {
+                const n = parseInt(val, 10)
+                if (n > 0) {
+                  this.page = 0
+                  setDirectiveAttr(view, this.directive, 'pageSize', String(n))
+                }
+              },
+            ).open()
+          })
+      )
+
+      const currentWhere = this.directive.attributes['where'] ?? ''
+      menu.addItem(item =>
+        item
+          .setTitle(currentWhere ? `Where: ${currentWhere}` : 'Set frontmatter filter…')
+          .setIcon('filter')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Set frontmatter filter',
+              'Filter expression',
+              'e.g. status=active or type=project|task',
+              currentWhere,
+              val => setDirectiveAttr(view, this.directive, 'where', val),
+            ).open()
+          })
+      )
+
+      menu.addItem(item =>
+        item
+          .setTitle('Add tag source…')
+          .setIcon('tag')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Add tag source',
+              'Tag',
+              'e.g. #project or project',
+              '',
+              val => {
+                const tag = val.startsWith('#') ? val : `#${val}`
+                addSourcePath(view, this.directive, tag)
+              },
+            ).open()
+          })
+      )
+
+      if (currentPageSize) {
+        menu.addSeparator()
+        menu.addItem(item =>
+          item
+            .setTitle('Remove page size')
+            .setIcon('x')
+            .onClick(() => {
+              this.page = 0
+              setDirectiveAttr(view, this.directive, 'pageSize', null)
+            })
+        )
+      }
+      if (currentWhere) {
+        menu.addItem(item =>
+          item
+            .setTitle('Remove frontmatter filter')
+            .setIcon('x')
+            .onClick(() => setDirectiveAttr(view, this.directive, 'where', null))
+        )
+      }
+
+      menu.showAtMouseEvent(e)
+    })
+    actions.appendChild(moreBtn)
 
     header.appendChild(actions)
     wrap.appendChild(header)
@@ -529,10 +707,18 @@ class ChecklistWidget extends DirectiveWidget {
       return
     }
 
+    // Pagination
+    const pageSize = parseInt(this.directive.attributes['pageSize'] ?? '0', 10) || 0
+    const totalPages = pageSize > 0 ? Math.ceil(filtered.length / pageSize) : 1
+    this.page = Math.max(0, Math.min(this.page, totalPages - 1))
+    const paginated = pageSize > 0
+      ? filtered.slice(this.page * pageSize, (this.page + 1) * pageSize)
+      : filtered
+
     if (grouped && sourceEntries.length > 0) {
       // Group tasks by source page
       const groups = new Map<string, Task[]>()
-      for (const task of filtered) {
+      for (const task of paginated) {
         const key = task.sourcePath ?? ''
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key)!.push(task)
@@ -561,10 +747,45 @@ class ChecklistWidget extends DirectiveWidget {
     } else {
       const list = activeDocument.createElement('div')
       list.className = 'directive-checklist__list'
-      for (const task of filtered) {
+      for (const task of paginated) {
         list.appendChild(this.buildRow(task, wrap, view, false))
       }
       wrap.appendChild(list)
+    }
+
+    // Pagination footer
+    if (totalPages > 1) {
+      const footer = activeDocument.createElement('div')
+      footer.className = 'directive-checklist__pagination'
+
+      const prevBtn = activeDocument.createElement('button')
+      prevBtn.className = 'clickable-icon directive-checklist__page-btn'
+      prevBtn.disabled = this.page === 0
+      setIcon(prevBtn, 'chevron-left')
+      prevBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      prevBtn.addEventListener('click', () => {
+        this.page = Math.max(0, this.page - 1)
+        void this.buildContent(wrap, view)
+      })
+
+      const pageLabel = activeDocument.createElement('span')
+      pageLabel.className = 'directive-checklist__page-label'
+      pageLabel.textContent = `${this.page + 1} / ${totalPages}`
+
+      const nextBtn = activeDocument.createElement('button')
+      nextBtn.className = 'clickable-icon directive-checklist__page-btn'
+      nextBtn.disabled = this.page >= totalPages - 1
+      setIcon(nextBtn, 'chevron-right')
+      nextBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      nextBtn.addEventListener('click', () => {
+        this.page = Math.min(totalPages - 1, this.page + 1)
+        void this.buildContent(wrap, view)
+      })
+
+      footer.appendChild(prevBtn)
+      footer.appendChild(pageLabel)
+      footer.appendChild(nextBtn)
+      wrap.appendChild(footer)
     }
 
     // Subscribe to vault changes so the widget stays in sync.
@@ -663,13 +884,16 @@ class ChecklistWidget extends DirectiveWidget {
   }
 
   private async toggleTask(task: Task, newChecked: boolean, wrap: HTMLElement, view: EditorView): Promise<void> {
+    task.checked = newChecked
     if (task.sourcePath === null) {
-      // Inline body — write via CM dispatch
+      // Inline body — write via CM dispatch; vault modify event won't fire, so rebuild manually.
       const replacement = newChecked ? 'x' : ' '
       view.dispatch({
         changes: { from: task.checkboxOffset, to: task.checkboxOffset + 1, insert: replacement },
       })
+      void this.buildContent(wrap, view)
     } else {
+      // External file — vault modify event will fire and trigger buildContent via the watcher.
       const file = this.app.vault.getAbstractFileByPath(task.sourcePath)
       if (!(file instanceof TFile)) return
       const content = await this.app.vault.read(file)
@@ -678,8 +902,6 @@ class ChecklistWidget extends DirectiveWidget {
         content.slice(task.checkboxOffset + 1)
       await this.app.vault.modify(file, updated)
     }
-    task.checked = newChecked
-    void this.buildContent(wrap, view)
   }
 
   private makeEditable(
@@ -701,16 +923,18 @@ class ChecklistWidget extends DirectiveWidget {
 
     const commit = async () => {
       const newText = input.value.trim()
-      if (newText === task.text) {
+      if (newText === task.text || !newText) {
         void this.buildContent(wrap, view)
         return
       }
       if (task.sourcePath === null) {
-        // Inline — dispatch CM change
+        // Inline — dispatch CM change; rebuild manually since no vault event fires.
         view.dispatch({
           changes: { from: task.textOffset, to: task.textOffset + task.text.length, insert: newText },
         })
+        void this.buildContent(wrap, view)
       } else {
+        // External file — vault modify event triggers the rebuild.
         const file = this.app.vault.getAbstractFileByPath(task.sourcePath)
         if (file instanceof TFile) {
           const content = await this.app.vault.read(file)
@@ -718,7 +942,6 @@ class ChecklistWidget extends DirectiveWidget {
           await this.app.vault.modify(file, updated)
         }
       }
-      void this.buildContent(wrap, view)
     }
 
     input.addEventListener('blur', () => { void commit() })
