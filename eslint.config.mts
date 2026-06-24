@@ -22,7 +22,7 @@ export default tseslint.config(
 			},
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ['eslint.config.mts', 'manifest.json'],
+					allowDefaultProject: ['eslint.config.mts', 'manifest.json', 'vitest.config.ts'],
 				},
 				tsconfigRootDir: import.meta.dirname,
 				extraFileExtensions: ['.json'],
@@ -30,4 +30,13 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	// Test files and stubs run in Node via Vitest — Obsidian-specific rules don't apply.
+	{
+		files: ['src/__tests__/**'],
+		rules: {
+			'obsidianmd/prefer-active-doc':    'off',
+			'obsidianmd/prefer-window-timers': 'off',
+			'obsidianmd/no-forbidden-elements': 'off',
+		},
+	},
 );

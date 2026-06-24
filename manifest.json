@@ -1,9 +1,9 @@
 {
 	"id": "obsidian-directives",
 	"name": "Directives",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.4.10",
 	"description": "Composable, interactive directive blocks for the live editor — audio players, YouTube embeds, chord charts, and guitar tabs.",
 	"author": "John",
 	"isDesktopOnly": true,
-	"version": "0.5.4"
+	"version": "0.5.5"
 }

@@ -8,6 +8,8 @@
    Shared widget shell
    -------------------------------------------------------------------------- */
 
+.directive-hidden { display: none; }
+
 .directive-widget {
   display: block;
   padding: 12px;

@@ -390,8 +390,8 @@ class AggregatorWidget extends DirectiveWidget {
   private async buildTabbed(wrap: HTMLElement, view: EditorView, tabs: TabDef[]): Promise<void> {
     wrap.empty()
     this.activeTab  = Math.min(this.activeTab, tabs.length - 1)
-    this.tabCaches  = new Array(tabs.length).fill([])
-    this.tabPages   = new Array(tabs.length).fill(0)
+    this.tabCaches  = Array.from({ length: tabs.length }, (): AggLine[] => [])
+    this.tabPages   = Array.from({ length: tabs.length }, () => 0)
 
     const label = this.directive.label
 

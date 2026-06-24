@@ -74,6 +74,14 @@ export function parseWhere(whereAttr: string): WhereCondition[] {
   })
 }
 
+/** Safely stringify a frontmatter value — only primitives produce meaningful strings. */
+function fmStr(v: unknown): string {
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+    return String(v).toLowerCase()
+  }
+  return ''
+}
+
 export function matchesFrontmatter(
   frontmatter: Record<string, unknown> | null | undefined,
   conditions: WhereCondition[],
@@ -84,8 +92,8 @@ export function matchesFrontmatter(
     const raw = frontmatter[key]
     if (raw == null) return false
     const candidates = Array.isArray(raw)
-      ? raw.map(v => String(v).toLowerCase())
-      : [String(raw).toLowerCase()]
+      ? raw.map(fmStr).filter(Boolean)
+      : [fmStr(raw)].filter(Boolean)
     return values.some(v => candidates.includes(v))
   })
 }
@@ -111,7 +119,10 @@ export function debounce<T extends (...args: Parameters<T>) => void>(
 ): (...args: Parameters<T>) => void {
   let timer: ReturnType<typeof setTimeout>
   return (...args: Parameters<T>): void => {
-    clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), ms)
+    // Use window.* when available (Obsidian/browser); fall back to globalThis in Node tests.
+    // eslint-disable-next-line obsidianmd/no-global-this
+    const w = typeof window !== 'undefined' ? window : globalThis
+    w.clearTimeout(timer)
+    timer = w.setTimeout(() => fn(...args), ms)
   }
 }

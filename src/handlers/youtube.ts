@@ -197,10 +197,14 @@ async function fetchTranscript(vid: string): Promise<TranscriptLine[]> {
       })
       if (res.status >= 400) continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any = res.json
-      const tracks: Array<{ baseUrl?: string; languageCode?: string; kind?: string }> =
-        data?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
+      const data = res.json as {
+        captions?: {
+          playerCaptionsTracklistRenderer?: {
+            captionTracks?: Array<{ baseUrl?: string; languageCode?: string; kind?: string }>
+          }
+        }
+      }
+      const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
       if (tracks.length === 0) continue
 
       const pick =
@@ -242,8 +246,8 @@ function decodeXmlEntities(s: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g,  "'")
     .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g,       (_, c) => String.fromCharCode(parseInt(c, 10)))
-    .replace(/&#x([a-fA-F0-9]+);/g, (_, c) => String.fromCharCode(parseInt(c, 16)))
+    .replace(/&#(\d+);/g,           (_, c: string) => String.fromCharCode(parseInt(c, 10)))
+    .replace(/&#x([a-fA-F0-9]+);/g, (_, c: string) => String.fromCharCode(parseInt(c, 16)))
     .replace(/\n/g, ' ')
     .trim()
 }
@@ -307,6 +311,7 @@ class YouTubeUrlModal extends Modal {
       .setName('URL or video ID')
       .addText(text => {
         this.input = text.inputEl
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- placeholder is a URL example, not prose
         text.setPlaceholder('https://youtu.be/dQw4w9WgXcQ')
         this.input.addEventListener('keydown', (e: KeyboardEvent) => {
           if (e.key === 'Enter') this.confirm()
@@ -317,7 +322,7 @@ class YouTubeUrlModal extends Modal {
     new Setting(contentEl)
       .addButton(btn => btn.setButtonText('Set').setCta().onClick(() => this.confirm()))
 
-    setTimeout(() => this.input.focus(), 50)
+    window.setTimeout(() => this.input.focus(), 50)
   }
 
   private confirm(): void {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* Minimal CM6 state stub */
 export class StateField<T> {
   static define<T>(_config: { create(_: unknown): T; update(_: T, _tr: unknown): T }): StateField<T> {
@@ -7,7 +8,7 @@ export class StateField<T> {
 export class EditorState {}
 export class Transaction {}
 export class Facet<I, O = I> {
-  static define<I, O = I>(): Facet<I, O> { return new Facet() }
+  static define<I2, O2 = I2>(): Facet<I2, O2> { return new Facet() }
   of(_: I): unknown { return null }
 }
 export class RangeSet<T> {

@@ -79,10 +79,10 @@ export function parseTasks(content: string, sourcePath: string | null): Task[] {
 
     const openMatch = DIRECTIVE_OPEN_RE.exec(trimmed)
     if (openMatch) {
-      const fenceLen = (trimmed.match(/^:+/) ?? [':::'])[0]!.length
+      const fenceLen = ((trimmed.match(/^:+/) ?? [':::'])[0] ?? ':::').length
       stack.push({ name: openMatch[1] ?? '', label: openMatch[2] ?? null, fenceLen })
     } else if (DIRECTIVE_CLOSE_RE.test(trimmed) && stack.length > 0) {
-      const fenceLen = (trimmed.match(/^:+/) ?? [':::'])[0]!.length
+      const fenceLen = ((trimmed.match(/^:+/) ?? [':::'])[0] ?? ':::').length
       // Pop the most recent frame whose fence length matches
       for (let i = stack.length - 1; i >= 0; i--) {
         if ((stack[i]?.fenceLen ?? 0) === fenceLen) {
@@ -205,10 +205,10 @@ async function findTasksByTag(
       const trimmed = line.trimEnd()
       const openMatch = DIRECTIVE_OPEN_RE.exec(trimmed)
       if (openMatch) {
-        const fenceLen = (trimmed.match(/^:+/) ?? [':::'])[0]!.length
+        const fenceLen = ((trimmed.match(/^:+/) ?? [':::'])[0] ?? ':::').length
         stack.push({ name: openMatch[1] ?? '', label: openMatch[2] ?? null, fenceLen })
       } else if (DIRECTIVE_CLOSE_RE.test(trimmed) && stack.length > 0) {
-        const fenceLen = (trimmed.match(/^:+/) ?? [':::'])[0]!.length
+        const fenceLen = ((trimmed.match(/^:+/) ?? [':::'])[0] ?? ':::').length
         for (let i = stack.length - 1; i >= 0; i--) {
           if ((stack[i]?.fenceLen ?? 0) === fenceLen) { stack.splice(i, 1); break }
         }
@@ -405,7 +405,6 @@ class ChecklistWidget extends DirectiveWidget {
     const whereAttr  = this.directive.attributes['where'] ?? ''
     const filterAttr = (this.directive.attributes['filter'] ?? 'all') as FilterMode
     const filter     = (['todo', 'done', 'all'] as const).includes(filterAttr) ? filterAttr : 'all'
-    const hasFrom    = fromAttr.trim().length > 0
     const where      = parseWhere(whereAttr)
 
     // Header row — label + action buttons
@@ -464,7 +463,7 @@ class ChecklistWidget extends DirectiveWidget {
     setIcon(sourceBtn, 'file-plus')
     sourceBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     sourceBtn.addEventListener('click', () => {
-      sourceBtn.style.display = 'none'
+      sourceBtn.classList.add('directive-hidden')
       const input = activeDocument.createElement('input')
       input.type        = 'text'
       input.placeholder = 'Search notes…'

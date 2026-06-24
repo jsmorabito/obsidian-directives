@@ -128,7 +128,7 @@ class LogEntryModal extends Modal {
     app: App,
     private readonly file: TFile,
     private readonly settings: DirectivesSettings,
-    private readonly onConfirm: (dateISO: string, note: string) => void,
+    private readonly onConfirm: (dateISO: string, note: string) => void | Promise<void>,
   ) {
     super(app)
   }
@@ -166,7 +166,7 @@ class LogEntryModal extends Modal {
       if (e.key === 'Escape') this.close()
     })
 
-    requestAnimationFrame(() => this.noteInput.focus())
+    window.requestAnimationFrame(() => this.noteInput.focus())
   }
 
   private confirm(): void {
@@ -177,7 +177,7 @@ class LogEntryModal extends Modal {
       return
     }
     this.close()
-    this.onConfirm(date, note)
+    void this.onConfirm(date, note)
   }
 
   onClose(): void {

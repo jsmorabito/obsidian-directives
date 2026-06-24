@@ -152,9 +152,10 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   applyFontSettings(): void {
     if (!this.fontStyleEl) {
-      this.fontStyleEl = document.createElement('style')
+      // Inject a single :root block for dynamic font CSS variables — cannot be a static stylesheet.
+      this.fontStyleEl = activeDocument.createElement('style')
       this.fontStyleEl.id = 'obsidian-directives-fonts'
-      document.head.appendChild(this.fontStyleEl)
+      activeDocument.head.appendChild(this.fontStyleEl)
     }
     const s = this.settings
     const rule = (prop: string, val: string) =>

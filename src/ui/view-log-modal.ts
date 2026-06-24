@@ -48,19 +48,20 @@ export class ViewLogPopover {
     this.component = new Component()
     this.component.load()
 
-    this.el = document.body.createDiv({ cls: 'view-log-popover' })
+    this.el = activeDocument.body.createDiv({ cls: 'view-log-popover' })
     this.el.style.top = `${rect.bottom + 4}px`
     this.el.style.right = `${window.innerWidth - rect.right}px`
+    // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- width is computed at runtime
     this.el.style.width = '400px'
 
-    this.build(this.el)
+    void this.build(this.el)
 
     this.outsideClickHandler = (e: MouseEvent) => {
       if (!this.el.contains(e.target as Node) && e.target !== anchorEl) {
         this.close()
       }
     }
-    setTimeout(() => document.addEventListener('mousedown', this.outsideClickHandler), 0)
+    window.setTimeout(() => activeDocument.addEventListener('mousedown', this.outsideClickHandler), 0)
   }
 
   private async build(container: HTMLElement): Promise<void> {
@@ -114,7 +115,7 @@ export class ViewLogPopover {
   }
 
   close(): void {
-    document.removeEventListener('mousedown', this.outsideClickHandler)
+    activeDocument.removeEventListener('mousedown', this.outsideClickHandler)
     this.component.unload()
     this.el.remove()
     this.onClose?.()

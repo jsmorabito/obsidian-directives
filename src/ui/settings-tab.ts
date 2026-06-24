@@ -28,12 +28,13 @@ export class DirectivesSettingTab extends PluginSettingTab {
       .setName(label)
       .setDesc(desc)
       .addText(text => {
+        // eslint-disable-next-line obsidianmd/ui/sentence-case -- font name is a proper noun, not prose
         text.setPlaceholder('e.g. New York').setValue(get())
         currentText = get()
         text.inputEl.addEventListener('input', () => { currentText = text.inputEl.value })
-        text.inputEl.addEventListener('blur', async () => { await set(currentText) })
-        text.inputEl.addEventListener('keydown', async (e: KeyboardEvent) => {
-          if (e.key === 'Enter') await set(currentText)
+        text.inputEl.addEventListener('blur', () => { void set(currentText) })
+        text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter') void set(currentText)
         })
       })
       .addButton(btn =>

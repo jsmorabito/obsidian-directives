@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* Minimal CM6 view stub */
 export class EditorView {}
 export class WidgetType {
