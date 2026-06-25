@@ -10,6 +10,95 @@
 
 .directive-hidden { display: none; }
 
+/* --------------------------------------------------------------------------
+   Foldable — CM6-native approach
+   The opening line of the directive remains a real .cm-line element.
+   FoldIndicatorWidget lives inside it, button absolutely positioned into the margin.
+   CSS :hover on .cm-line propagates to button (DOM child) — no JS hover needed.
+   -------------------------------------------------------------------------- */
+
+/* Collapse the opening-line height to zero only when using the legacy
+   zero-height indicator (no header content on the line). */
+.cm-line:has(.directive-fold-indicator) {
+  height: 0 !important;
+  line-height: 0 !important;
+  overflow: visible;
+}
+
+/* Zero-height inline wrapper for legacy fold-only mode */
+.directive-fold-indicator {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  vertical-align: top;
+}
+
+/* Header-on-line mode: inline span that renders header content + fold button */
+.directive-fold-header {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+/* Button in the left margin — same absolute-position trick as Obsidian heading folds */
+.directive-foldable__toggle {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline-end: 5px;
+  cursor: var(--cursor, pointer);
+  opacity: 0;
+  user-select: none;
+}
+
+/* In header-on-line mode the toggle is inside the header, not the fold-indicator */
+.directive-fold-header .directive-foldable__toggle {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.directive-foldable__toggle .svg-icon {
+  color: var(--nav-collapse-icon-color);
+  stroke-width: 4px;
+  width: 10px;
+  height: 10px;
+}
+
+/* Show on hover of the .cm-line */
+.cm-line:hover .directive-foldable__toggle {
+  opacity: 1;
+}
+
+/* Always visible when collapsed, purple to match heading fold arrows */
+.directive-foldable__toggle--collapsed {
+  opacity: 1;
+}
+
+.directive-foldable__toggle--collapsed .svg-icon {
+  transform: rotate(-90deg);
+  color: var(--collapse-icon-color-collapsed) !important;
+}
+
+/* Legacy collapsed state (non-split foldable) */
+.directive-foldable--collapsed > *:not(:first-child),
+.directive-foldable--collapsed.directive-widget > *:not(:first-child) {
+  display: none;
+}
+
+/* Body-only card (split foldable): no top margin since header is above it on its own line */
+.directive-widget--body-only {
+  margin-block-start: 0;
+}
+
 .directive-widget {
   display: block;
   padding: 12px;
@@ -19,7 +108,7 @@
   font-size: var(--font-ui-small);
   color: var(--text-normal);
   box-sizing: border-box;
-  margin-block: 4px;
+  margin-block: var(--size-2-2);
   /* No drop shadow — keeps visual weight consistent with Obsidian's flat aesthetic */
 }
 
@@ -42,7 +131,7 @@
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: var(--size-2-2);
 }
 
 .directive-widget__body {
@@ -68,9 +157,9 @@
 .directive-timestamp-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--size-4-2);
   height: 28px;
-  padding: 0 4px;
+  padding: 0 var(--size-2-2);
   cursor: pointer;
   border-left: 3px solid transparent;
   transition: background var(--anim-duration-fast) var(--anim-motion-smooth);
@@ -102,9 +191,9 @@
 .directive-transport {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--size-4-2);
   height: 40px;
-  padding: 0 4px;
+  padding: 0 var(--size-2-2);
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -113,7 +202,7 @@
   border: none;
   cursor: pointer;
   color: var(--text-normal);
-  padding: 4px;
+  padding: var(--size-2-2);
   border-radius: var(--radius-s);
   display: flex;
   align-items: center;
@@ -150,7 +239,7 @@
 .directive-widget--error {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--size-4-2);
   color: var(--text-error);
   height: 40px;
 }
@@ -212,9 +301,9 @@
 .directive-tab-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--size-4-2);
   height: 40px;
-  padding: 0 4px;
+  padding: 0 var(--size-2-2);
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -227,7 +316,7 @@
 .directive-bpm-control {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--size-2-2);
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -253,7 +342,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 4px 0;
+  padding: var(--size-2-2) 0;
 }
 
 .directive-chords-horizontal {
@@ -261,20 +350,20 @@
   flex-wrap: nowrap;
   gap: 12px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: var(--size-2-2);
 }
 
 .directive-chords-vertical {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--size-4-2);
 }
 
 .directive-chords-text {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--size-2-2);
   font-size: var(--font-ui-medium);
 }
 
@@ -282,10 +371,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--size-2-2);
   cursor: pointer;
   border-radius: var(--radius-s);
-  padding: 4px;
+  padding: var(--size-2-2);
   border: 2px solid transparent;
   transition: border-color 80ms ease;
 }
@@ -317,7 +406,7 @@
 .directive-chords-header {
   font-weight: var(--font-semibold);
   color: var(--text-normal);
-  margin-bottom: 8px;
+  margin-bottom: var(--size-4-2);
   font-size: var(--font-ui-small);
 }
 
@@ -399,7 +488,7 @@
 .directive-youtube-transcript--error {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--size-4-2);
   padding: 10px 12px;
   font-size: var(--font-ui-small);
   color: var(--text-muted);
@@ -457,8 +546,8 @@
   height: auto;
   min-height: 28px;
   align-items: flex-start;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: var(--size-2-2);
+  padding-bottom: var(--size-2-2);
   white-space: normal;
 }
 
@@ -515,6 +604,12 @@
   transform: translateY(-50%);
 }
 
+.directive-log-actions-btn {
+  padding: var(--size-2-2);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
 .directive-log-actions-btn svg {
   width: var(--icon-s);
   height: var(--icon-s);
@@ -547,7 +642,7 @@
 .directive-log-search-input.is-open {
   width: 120px;
   opacity: 1;
-  padding: 0 4px;
+  padding: 0 var(--size-2-2);
   pointer-events: auto;
 }
 
@@ -650,7 +745,7 @@
 }
 
 .directive-log-entries {
-  padding: 4px 0 8px;
+  padding: var(--size-2-2) 0 var(--size-4-2);
 }
 
 .directive-log-empty {
@@ -672,7 +767,7 @@
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   color: var(--interactive-accent);
-  margin-bottom: 4px;
+  margin-bottom: var(--size-2-2);
 }
 
 .directive-log-content {
@@ -866,7 +961,7 @@
 .directive-suggest-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--size-2-3);
 }
 
 .directive-suggest-colons {
@@ -900,39 +995,63 @@
   border: 1px solid var(--background-modifier-border);
 }
 
+/* Outer wrapper — header above card, same pattern as Obsidian Bases */
+.directive-checklist__outer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-2-2);
+  margin-block: var(--size-2-2);
+}
+
 .directive-checklist__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
-  min-height: 24px;
+  height: var(--bases-header-height, 40px);
+  min-height: var(--bases-header-height, 40px);
+  padding-inline-start: var(--size-4-2);
+  padding-inline-end: var(--size-2-2);
+}
+
+/* When inside the foldable header-on-line span, fill available width */
+.directive-fold-header .directive-checklist__header {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  padding-inline: 0;
 }
 
 .directive-checklist__title {
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   color: var(--text-normal);
+  flex-shrink: 0;
 }
 
 .directive-checklist__actions {
   display: flex;
   align-items: center;
-  gap: 2px;
   margin-left: auto;
 }
 
 .directive-checklist__action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+  padding: var(--size-2-2);
+  margin: var(--size-2-1);
   background: none;
   border: none;
-  border-radius: var(--radius-s);
+  border-radius: var(--button-corner-shape);
   color: var(--text-muted);
-  cursor: pointer;
+  cursor: var(--cursor);
+  font-size: var(--font-ui-small);
+  font-weight: var(--input-font-weight);
+  font-family: inherit;
+  overflow: hidden;
+  user-select: none;
+  white-space: nowrap;
+  gap: var(--size-2-2);
 }
 
 .directive-checklist__action-btn:hover {
@@ -941,9 +1060,8 @@
 }
 
 .directive-checklist__filter-btn {
-  width: auto;
-  padding: 0 4px;
-  gap: 3px;
+  padding-inline: var(--size-2-2);
+  gap: var(--size-2-2);
 }
 
 .directive-checklist__filter-badge {
@@ -958,7 +1076,7 @@
 }
 
 .directive-checklist__group {
-  margin-bottom: 8px;
+  margin-bottom: var(--size-4-2);
 }
 
 .directive-checklist__group:last-child {
@@ -971,7 +1089,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 0 4px;
+  padding: 0 var(--size-2-2);
   margin-bottom: 2px;
 }
 
@@ -997,7 +1115,7 @@
 .directive-checklist__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--size-4-2);
   padding: 3px 4px;
   border-radius: var(--radius-s);
   cursor: default;
@@ -1077,7 +1195,7 @@
   color: var(--text-faint);
   font-size: var(--font-ui-small);
   font-style: italic;
-  padding: 4px 0;
+  padding: var(--size-2-2) 0;
 }
 
 .directive-checklist__empty-hint {
@@ -1091,8 +1209,8 @@
   background: var(--background-modifier-hover);
   color: var(--text-muted);
   font-style: normal;
-  font-size: 14px;
-  font-weight: bold;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-bold);
   vertical-align: middle;
   line-height: 1;
 }
@@ -1103,10 +1221,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--size-2-2);
   padding: 4px 0 2px;
   border-top: 1px solid var(--background-modifier-border);
-  margin-top: 4px;
+  margin-top: var(--size-2-2);
 }
 
 .directive-checklist__page-label {
@@ -1143,15 +1261,15 @@
 
 .directive-aggregator__tab-bar {
   display: flex;
-  gap: 2px;
-  padding: 0 4px 6px;
+  gap: var(--size-2-1);
+  padding: 0 var(--size-2-2) var(--size-2-3);
   border-bottom: 1px solid var(--background-modifier-border);
-  margin-bottom: 6px;
+  margin-bottom: var(--size-2-3);
   flex-wrap: wrap;
 }
 
 .directive-aggregator__tab-btn {
-  padding: 2px 10px;
+  padding: var(--size-2-1) var(--size-4-2);
   border-radius: var(--radius-s);
   border: none;
   background: none;
@@ -1175,22 +1293,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 4px 2px;
+  gap: var(--size-2-2);
+  padding: var(--size-2-3) var(--size-2-2) var(--size-2-1);
   border-top: 1px solid var(--background-modifier-border);
-  margin-top: 6px;
+  margin-top: var(--size-2-3);
 }
 
 .directive-aggregator__page-counter {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  min-width: 80px;
+  min-width: var(--size-4-18, 72px);
   text-align: center;
-}
-
-.directive-aggregator__page-btn {
-  width: 20px;
-  height: 20px;
 }
 
 .directive-aggregator__page-btn:disabled {

@@ -288,6 +288,25 @@ function setTabAttr(
 }
 
 // ---------------------------------------------------------------------------
+// Module-level result cache (stale-while-revalidate across widget instances)
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  tabResults: AggLine[][]  // one AggLine[] per tab (length 1 for single-tab mode)
+  watchedPaths: Set<string>
+  hasTagSource: boolean
+}
+
+const aggregatorCache = new Map<string, CacheEntry>()
+
+function makeCacheKey(directive: ParsedDirective, tabs: TabDef[]): string {
+  if (tabs.length > 0) {
+    return JSON.stringify(tabs.map(t => ({ label: t.label, attrs: t.attrs })))
+  }
+  return JSON.stringify({ attrs: directive.attributes, label: directive.label })
+}
+
+// ---------------------------------------------------------------------------
 // AggregatorWidget
 // ---------------------------------------------------------------------------
 
@@ -302,6 +321,11 @@ class AggregatorWidget extends DirectiveWidget {
   private activeTab = 0
   private tabCaches: AggLine[][] = []
   private tabPages: number[] = []
+
+  // Split-rendering refs (set by toHeaderDOM / toBodyDOM)
+  private titleEl: HTMLElement | null = null
+  private actionsEl: HTMLElement | null = null
+  private bodyEl: HTMLElement | null = null
 
   constructor(
     private readonly directive: ParsedDirective,
@@ -328,94 +352,171 @@ class AggregatorWidget extends DirectiveWidget {
 
   toDOM(view: EditorView): HTMLElement {
     const wrap = activeDocument.createElement('div')
-    wrap.className = 'directive-widget directive-widget--aggregator'
+    wrap.className = 'directive-checklist__outer'
     wrap.addEventListener('mousedown', (e: MouseEvent) => {
       e.preventDefault()
       view.dispatch({ selection: { anchor: this.directive.from } })
       view.focus()
     })
-    void this.buildContent(wrap, view)
+
+    const tabs = parseTabDefs(this.directive.body ?? '')
+    const label = this.directive.label ?? 'Aggregator'
+    const onRefresh = tabs.length > 0
+      ? () => void this.buildTabbed(wrap, view, tabs)
+      : () => void this.buildSingle(wrap, view)
+
+    const header = this.buildHeader(label, view, onRefresh)
+    this.titleEl   = header.querySelector('.directive-checklist__title') as HTMLElement
+    this.actionsEl = header.querySelector('.directive-checklist__actions') as HTMLElement
+    wrap.appendChild(header)
+
+    const bodyEl = activeDocument.createElement('div')
+    bodyEl.className = 'directive-widget directive-widget--aggregator'
+    bodyEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    wrap.appendChild(bodyEl)
+    this.bodyEl = bodyEl
+
+    void this.buildBodyContent(bodyEl, view)
     return wrap
   }
 
-  private async buildContent(wrap: HTMLElement, view: EditorView): Promise<void> {
+  toHeaderDOM(view: EditorView): HTMLElement {
+    const tabs  = parseTabDefs(this.directive.body ?? '')
+    const label = this.directive.label ?? 'Aggregator'
+    const onRefresh = tabs.length > 0
+      ? () => { if (this.bodyEl) void this.buildBodyContent(this.bodyEl, view) }
+      : () => { if (this.bodyEl) void this.buildBodyContent(this.bodyEl, view) }
+
+    const header = this.buildHeader(label, view, onRefresh)
+    this.titleEl   = header.querySelector('.directive-checklist__title') as HTMLElement
+    this.actionsEl = header.querySelector('.directive-checklist__actions') as HTMLElement
+
+    if (tabs.length === 0) {
+      this.buildActionButtons(
+        this.actionsEl,
+        this.directive.attributes,
+        (key, value) => setDirectiveAttr(view, this.directive, key, value),
+      )
+    }
+
+    header.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+    return header
+  }
+
+  toBodyDOM(view: EditorView): HTMLElement {
+    const wrap = activeDocument.createElement('div')
+    wrap.className = 'directive-widget directive-widget--aggregator directive-widget--body-only'
+    wrap.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+    this.bodyEl = wrap
+    void this.buildBodyContent(wrap, view)
+    return wrap
+  }
+
+  private async buildBodyContent(container: HTMLElement, view: EditorView): Promise<void> {
     for (const fn of this.cleanups) fn()
     this.cleanups = []
 
     const tabs = parseTabDefs(this.directive.body ?? '')
-
     if (tabs.length > 0) {
-      await this.buildTabbed(wrap, view, tabs)
+      await this.buildTabbed(container, view, tabs)
     } else {
-      await this.buildSingle(wrap, view)
+      await this.buildSingle(container, view)
     }
   }
 
   // ── Single-tab mode (no ::tab lines in body) ────────────────────────────────
 
-  private async buildSingle(wrap: HTMLElement, view: EditorView): Promise<void> {
-    wrap.empty()
+  // ── Single-tab mode ────────────────────────────────────────────────────────
 
-    const label    = this.directive.label
+  private async buildSingle(bodyEl: HTMLElement, view: EditorView): Promise<void> {
     const attrs    = this.directive.attributes
+    const label    = this.directive.label ?? 'Aggregator'
     const grouped  = attrs['group'] === 'true'
     const paginate = attrs['paginate'] === 'true'
     const pageSize = Math.max(1, parseInt(attrs['page-size'] ?? '', 10) || DEFAULT_PAGE_SIZE)
 
-    // Header
-    const header  = this.buildHeader(label ?? 'Aggregator', view, () => void this.buildSingle(wrap, view))
-    const actions = header.querySelector('.directive-checklist__actions') as HTMLElement
-    const title   = header.querySelector('.directive-checklist__title') as HTMLElement
-
-    this.buildActionButtons(actions, attrs, (key, value) => setDirectiveAttr(view, this.directive, key, value))
-    wrap.appendChild(header)
+    // In non-split mode (toDOM), bodyEl contains the header; add action buttons now.
+    if (this.actionsEl) {
+      // Remove any previously injected dynamic buttons (keep permanent refresh + edit).
+      Array.from(this.actionsEl.children).forEach(child => {
+        if (!(child as HTMLElement).dataset['permanent']) this.actionsEl!.removeChild(child)
+      })
+      this.buildActionButtons(
+        this.actionsEl,
+        attrs,
+        (key, value) => setDirectiveAttr(view, this.directive, key, value),
+      )
+    }
 
     const sourceEntries = (attrs['from'] ?? '').split(',').map(s => s.trim()).filter(Boolean)
 
+    // Clear body content (not the header — header is a sibling, not inside bodyEl).
+    this.clearBodyContent(bodyEl)
+
     if (sourceEntries.length === 0) {
-      wrap.appendChild(this.emptyEl('Add a from= attribute to pull lines (e.g. from="#improvements")'))
+      bodyEl.appendChild(this.emptyEl('Add a from= attribute to pull lines (e.g. from="#improvements")'))
       return
     }
 
-    const { lines, watchedPaths, hasTagSource } = await collectLines(attrs, this.app)
-    this.cachedLines = lines
-    title.textContent = `${label ?? 'Aggregator'} (${lines.length})`
+    // Render from cache immediately if available (stale-while-revalidate).
+    const cacheKey = makeCacheKey(this.directive, [])
+    const cached = aggregatorCache.get(cacheKey)
+    if (cached) {
+      this.cachedLines = cached.tabResults[0] ?? []
+      if (this.titleEl) this.titleEl.textContent = `${label} (${this.cachedLines.length})`
+      this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, 'single')
+      this.setupWatchers(cached.watchedPaths, cached.hasTagSource, () => void this.buildSingle(bodyEl, view))
+    }
 
-    this.renderPage(wrap, view, grouped, sourceEntries, paginate, pageSize, 'single')
-    this.setupWatchers(watchedPaths, hasTagSource, () => void this.buildSingle(wrap, view))
+    const { lines, watchedPaths, hasTagSource } = await collectLines(attrs, this.app)
+    aggregatorCache.set(cacheKey, { tabResults: [lines], watchedPaths, hasTagSource })
+
+    if (cached && lines.length === this.cachedLines.length &&
+        lines.every((l, i) => l.text === (this.cachedLines[i]?.text ?? ''))) return
+
+    this.cachedLines = lines
+    if (this.titleEl) this.titleEl.textContent = `${label} (${lines.length})`
+    this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, 'single')
+    if (!cached) this.setupWatchers(watchedPaths, hasTagSource, () => void this.buildSingle(bodyEl, view))
   }
 
-  // ── Multi-tab mode (::tab lines present in body) ────────────────────────────
+  // ── Multi-tab mode ──────────────────────────────────────────────────────────
 
-  private async buildTabbed(wrap: HTMLElement, view: EditorView, tabs: TabDef[]): Promise<void> {
-    wrap.empty()
-    this.activeTab  = Math.min(this.activeTab, tabs.length - 1)
-    this.tabCaches  = Array.from({ length: tabs.length }, (): AggLine[] => [])
-    this.tabPages   = Array.from({ length: tabs.length }, () => 0)
+  private async buildTabbed(bodyEl: HTMLElement, view: EditorView, tabs: TabDef[]): Promise<void> {
+    this.activeTab = Math.min(this.activeTab, tabs.length - 1)
+    this.tabCaches = Array.from({ length: tabs.length }, (): AggLine[] => [])
+    this.tabPages  = Array.from({ length: tabs.length }, () => 0)
 
-    const label = this.directive.label
+    const label = this.directive.label ?? 'Aggregator'
 
-    // Header (title + refresh only — per-tab config lives in ::tab attrs)
-    const header = this.buildHeader(label ?? 'Aggregator', view, () => void this.buildTabbed(wrap, view, tabs))
-    wrap.appendChild(header)
-
-    // Header action buttons — wired to the active tab's ::tab line
-    const headerActions = header.querySelector('.directive-checklist__actions') as HTMLElement
-    const rebuildActions = () => {
-      // Remove all buttons except the last one (refresh)
-      while (headerActions.children.length > 1) headerActions.removeChild(headerActions.firstChild!)
+    // Rebuild header action buttons to match the active tab.
+    const rebuildHeaderActions = () => {
+      if (!this.actionsEl) return
+      Array.from(this.actionsEl.children).forEach(child => {
+        if (!(child as HTMLElement).dataset['permanent']) this.actionsEl!.removeChild(child)
+      })
       this.buildActionButtons(
-        headerActions,
+        this.actionsEl,
         tabs[this.activeTab]?.attrs ?? {},
         (key, value) => setTabAttr(view, this.directive, this.activeTab, key, value),
       )
     }
-    rebuildActions()
+    rebuildHeaderActions()
 
-    // Tab bar
+    // Tab bar lives in the body.
+    this.clearBodyContent(bodyEl)
+
     const tabBar = activeDocument.createElement('div')
     tabBar.className = 'directive-aggregator__tab-bar'
-    tabBar.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    tabBar.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
     const tabBtns: HTMLButtonElement[] = []
     tabs.forEach((tab, idx) => {
@@ -423,23 +524,32 @@ class AggregatorWidget extends DirectiveWidget {
       btn.className = 'directive-aggregator__tab-btn'
       btn.classList.toggle('is-active', idx === this.activeTab)
       btn.textContent = tab.label
-      btn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      btn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       btn.addEventListener('click', () => {
         if (this.activeTab === idx) return
         this.activeTab = idx
         tabBtns.forEach((b, i) => b.classList.toggle('is-active', i === idx))
-        rebuildActions()
-        this.renderTabContent(wrap, view, tabs[idx]!, idx)
+        rebuildHeaderActions()
+        this.renderTabContent(bodyEl, view, tabs[idx]!, idx)
       })
       tabBtns.push(btn)
       tabBar.appendChild(btn)
     })
-    wrap.appendChild(tabBar)
+    bodyEl.appendChild(tabBar)
 
-    // Fetch all tabs in parallel
+    const cacheKey = makeCacheKey(this.directive, tabs)
+    const cached = aggregatorCache.get(cacheKey)
+    if (cached) {
+      tabs.forEach((tab, idx) => {
+        this.tabCaches[idx] = cached.tabResults[idx] ?? []
+        tabBtns[idx]!.textContent = `${tab.label} (${this.tabCaches[idx]?.length ?? 0})`
+      })
+      this.renderTabContent(bodyEl, view, tabs[this.activeTab]!, this.activeTab)
+      this.setupWatchers(cached.watchedPaths, cached.hasTagSource, () => void this.buildTabbed(bodyEl, view, tabs))
+    }
+
     const allWatchedPaths = new Set<string>()
     let hasTagSource = false
-
     const results = await Promise.all(tabs.map(tab => collectLines(tab.attrs, this.app)))
     results.forEach(({ lines, watchedPaths, hasTagSource: hts }, idx) => {
       this.tabCaches[idx] = lines
@@ -447,41 +557,59 @@ class AggregatorWidget extends DirectiveWidget {
       if (hts) hasTagSource = true
     })
 
-    // Update tab labels with counts
+    aggregatorCache.set(cacheKey, { tabResults: this.tabCaches.map(c => [...c]), watchedPaths: allWatchedPaths, hasTagSource })
+
     tabBtns.forEach((btn, idx) => {
-      btn.textContent = `${tabs[idx]!.label} (${this.tabCaches[idx]?.length ?? 0})`
+      const count = this.tabCaches[idx]?.length ?? 0
+      btn.textContent = `${tabs[idx]!.label} (${count})`
     })
 
-    // Render active tab
-    this.renderTabContent(wrap, view, tabs[this.activeTab]!, this.activeTab)
+    if (this.titleEl) {
+      const total = this.tabCaches.reduce((s, c) => s + c.length, 0)
+      this.titleEl.textContent = `${label} (${total})`
+    }
 
-    this.setupWatchers(allWatchedPaths, hasTagSource, () => void this.buildTabbed(wrap, view, tabs))
+    const countUnchanged = cached && tabs.every((_, idx) =>
+      (cached.tabResults[idx]?.length ?? -1) === (this.tabCaches[idx]?.length ?? 0))
+    if (!countUnchanged) this.renderTabContent(bodyEl, view, tabs[this.activeTab]!, this.activeTab)
+
+    if (!cached) this.setupWatchers(allWatchedPaths, hasTagSource, () => void this.buildTabbed(bodyEl, view, tabs))
   }
 
-  private renderTabContent(wrap: HTMLElement, view: EditorView, tab: TabDef, idx: number): void {
-    // Remove everything after header + tab bar (first two children)
-    while (wrap.children.length > 2) wrap.removeChild(wrap.lastChild!)
+  private renderTabContent(bodyEl: HTMLElement, view: EditorView, tab: TabDef, idx: number): void {
+    // Keep only the tab bar (first child), remove everything after it.
+    while (bodyEl.children.length > 1) bodyEl.removeChild(bodyEl.lastChild!)
 
     const grouped  = tab.attrs['group'] === 'true'
     const paginate = tab.attrs['paginate'] === 'true'
     const pageSize = Math.max(1, parseInt(tab.attrs['page-size'] ?? '', 10) || DEFAULT_PAGE_SIZE)
     const sourceEntries = (tab.attrs['from'] ?? '').split(',').map(s => s.trim()).filter(Boolean)
 
-    this.cachedLines  = this.tabCaches[idx] ?? []
-    this.currentPage  = this.tabPages[idx] ?? 0
+    this.cachedLines = this.tabCaches[idx] ?? []
+    this.currentPage = this.tabPages[idx] ?? 0
 
     if (this.cachedLines.length === 0) {
-      wrap.appendChild(this.emptyEl('No matching lines found'))
+      bodyEl.appendChild(this.emptyEl('No matching lines found'))
       return
     }
 
-    this.renderPage(wrap, view, grouped, sourceEntries, paginate, pageSize, `tab-${idx}`)
+    this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, `tab-${idx}`)
+  }
+
+  /** Clear body content — in single mode removes all children; in tabbed keeps the tab bar. */
+  private clearBodyContent(bodyEl: HTMLElement): void {
+    const hasTabBar = !!bodyEl.querySelector('.directive-aggregator__tab-bar')
+    if (hasTabBar) {
+      while (bodyEl.children.length > 1) bodyEl.removeChild(bodyEl.lastChild!)
+    } else {
+      bodyEl.empty()
+    }
   }
 
   // ── Shared rendering ────────────────────────────────────────────────────────
 
   private renderPage(
-    wrap: HTMLElement,
+    bodyEl: HTMLElement,
     view: EditorView,
     grouped: boolean,
     sourceEntries: string[],
@@ -489,9 +617,9 @@ class AggregatorWidget extends DirectiveWidget {
     pageSize: number,
     pageKey: string,
   ): void {
-    // Remove everything after header (and tab bar if present)
-    const keepCount = wrap.querySelector('.directive-aggregator__tab-bar') ? 2 : 1
-    while (wrap.children.length > keepCount) wrap.removeChild(wrap.lastChild!)
+    // Keep only the tab bar if present, then add list/pagination below it.
+    const keepCount = bodyEl.querySelector('.directive-aggregator__tab-bar') ? 1 : 0
+    while (bodyEl.children.length > keepCount) bodyEl.removeChild(bodyEl.lastChild!)
 
     const allLines   = this.cachedLines
     const totalPages = paginate ? Math.max(1, Math.ceil(allLines.length / pageSize)) : 1
@@ -502,7 +630,7 @@ class AggregatorWidget extends DirectiveWidget {
       : allLines
 
     if (allLines.length === 0) {
-      wrap.appendChild(this.emptyEl('No matching lines found'))
+      bodyEl.appendChild(this.emptyEl('No matching lines found'))
       return
     }
 
@@ -526,34 +654,33 @@ class AggregatorWidget extends DirectiveWidget {
         list.className = 'directive-checklist__list'
         for (const line of lines) list.appendChild(this.buildRow(line, view))
         section.appendChild(list)
-        wrap.appendChild(section)
+        bodyEl.appendChild(section)
       }
     } else {
       const list = activeDocument.createElement('div')
       list.className = 'directive-checklist__list'
       for (const line of visibleLines) list.appendChild(this.buildRow(line, view))
-      wrap.appendChild(list)
+      bodyEl.appendChild(list)
     }
 
-    // Pagination footer
     if (paginate && totalPages > 1) {
       const start = this.currentPage * pageSize + 1
       const end   = Math.min((this.currentPage + 1) * pageSize, allLines.length)
 
       const footer = activeDocument.createElement('div')
       footer.className = 'directive-aggregator__pagination'
-      footer.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      footer.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
       const prevBtn = activeDocument.createElement('button')
       prevBtn.className = 'clickable-icon directive-checklist__action-btn directive-aggregator__page-btn'
       prevBtn.setAttribute('aria-label', 'Previous page')
       setIcon(prevBtn, 'chevron-left')
       prevBtn.disabled = this.currentPage === 0
-      prevBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      prevBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       prevBtn.addEventListener('click', () => {
         this.currentPage--
         this.syncTabPage()
-        this.renderPage(wrap, view, grouped, sourceEntries, paginate, pageSize, pageKey)
+        this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, pageKey)
       })
 
       const counter = activeDocument.createElement('span')
@@ -565,26 +692,26 @@ class AggregatorWidget extends DirectiveWidget {
       nextBtn.setAttribute('aria-label', 'Next page')
       setIcon(nextBtn, 'chevron-right')
       nextBtn.disabled = this.currentPage >= totalPages - 1
-      nextBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      nextBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       nextBtn.addEventListener('click', () => {
         this.currentPage++
         this.syncTabPage()
-        this.renderPage(wrap, view, grouped, sourceEntries, paginate, pageSize, pageKey)
+        this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, pageKey)
       })
 
       footer.appendChild(prevBtn)
       footer.appendChild(counter)
       footer.appendChild(nextBtn)
-      wrap.appendChild(footer)
+      bodyEl.appendChild(footer)
     } else if (paginate) {
       const footer = activeDocument.createElement('div')
       footer.className = 'directive-aggregator__pagination'
-      footer.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      footer.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       const counter = activeDocument.createElement('span')
       counter.className = 'directive-aggregator__page-counter'
       counter.textContent = `${allLines.length} result${allLines.length === 1 ? '' : 's'}`
       footer.appendChild(counter)
-      wrap.appendChild(footer)
+      bodyEl.appendChild(footer)
     }
   }
 
@@ -598,7 +725,7 @@ class AggregatorWidget extends DirectiveWidget {
   private buildHeader(titleText: string, view: EditorView, onRefresh: () => void): HTMLElement {
     const header = activeDocument.createElement('div')
     header.className = 'directive-checklist__header'
-    header.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    header.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
     const title = activeDocument.createElement('span')
     title.className = 'directive-checklist__title'
@@ -612,9 +739,22 @@ class AggregatorWidget extends DirectiveWidget {
     refreshBtn.className = 'clickable-icon directive-checklist__action-btn'
     refreshBtn.setAttribute('aria-label', 'Refresh')
     setIcon(refreshBtn, 'refresh-cw')
-    refreshBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    refreshBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     refreshBtn.addEventListener('click', onRefresh)
+    refreshBtn.dataset['permanent'] = '1'
     actions.appendChild(refreshBtn)
+
+    const editBtn = activeDocument.createElement('button')
+    editBtn.className = 'clickable-icon directive-checklist__action-btn'
+    editBtn.setAttribute('aria-label', 'Edit this block')
+    setIcon(editBtn, 'code-2')
+    editBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    editBtn.addEventListener('click', () => {
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+    editBtn.dataset['permanent'] = '1'
+    actions.appendChild(editBtn)
 
     header.appendChild(actions)
     return header
@@ -637,7 +777,7 @@ class AggregatorWidget extends DirectiveWidget {
     groupBtn.setAttribute('aria-label', grouped ? 'Ungroup results' : 'Group by source')
     setIcon(groupBtn, 'layers')
     groupBtn.classList.toggle('is-active', grouped)
-    groupBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    groupBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     groupBtn.addEventListener('click', () => onAttrChange('group', grouped ? null : 'true'))
     actions.insertBefore(groupBtn, actions.firstChild)
 
@@ -653,7 +793,7 @@ class AggregatorWidget extends DirectiveWidget {
     filterBadge.className = 'directive-checklist__filter-badge'
     filterBadge.textContent = filterLabels[filter]
     filterBtn.appendChild(filterBadge)
-    filterBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    filterBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     filterBtn.addEventListener('click', () => {
       const idx  = filterCycle.indexOf(filter)
       const next = filterCycle[(idx + 1) % filterCycle.length] ?? 'all'
@@ -667,7 +807,7 @@ class AggregatorWidget extends DirectiveWidget {
     paginateBtn.setAttribute('aria-label', paginate ? 'Disable pagination' : 'Enable pagination')
     setIcon(paginateBtn, 'book-open')
     paginateBtn.classList.toggle('is-active', paginate)
-    paginateBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    paginateBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     paginateBtn.addEventListener('click', () => onAttrChange('paginate', paginate ? null : 'true'))
     actions.insertBefore(paginateBtn, actions.firstChild)
   }
@@ -682,12 +822,12 @@ class AggregatorWidget extends DirectiveWidget {
   private buildRow(line: AggLine, view: EditorView): HTMLElement {
     const row = activeDocument.createElement('div')
     row.className = 'directive-checklist__row directive-aggregator__row'
-    row.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    row.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
     const textEl = activeDocument.createElement('span')
     textEl.className = 'directive-checklist__text directive-aggregator__text'
     textEl.textContent = line.text
-    textEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    textEl.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
     const rowActions = activeDocument.createElement('span')
     rowActions.className = 'directive-checklist__row-actions'
@@ -697,7 +837,7 @@ class AggregatorWidget extends DirectiveWidget {
       jumpBtn.className = 'clickable-icon directive-checklist__row-btn'
       jumpBtn.setAttribute('aria-label', 'Jump to source')
       setIcon(jumpBtn, 'arrow-right')
-      jumpBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      jumpBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       jumpBtn.addEventListener('click', () => void this.jumpToLine(line))
       rowActions.appendChild(jumpBtn)
     }

@@ -23,6 +23,7 @@
  *           inlineDecorationsPlugin.
  */
 
+import { setIcon } from 'obsidian'
 import {
   Decoration,
   DecorationSet,
@@ -31,13 +32,172 @@ import {
   ViewUpdate,
   WidgetType,
 } from '@codemirror/view'
-import { EditorSelection, EditorState, RangeSetBuilder, StateField, Transaction } from '@codemirror/state'
+import { EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction } from '@codemirror/state'
 import type { Extension } from '@codemirror/state'
+import { foldedRanges, foldEffect as cmFoldEffect, unfoldEffect as cmUnfoldEffect } from '@codemirror/language'
 
 import type { ParsedDirective } from '../types'
 import type { DirectiveRegistry } from './registry'
 import { directivesField } from './parser'
 import { eventBusField } from './event-bus'
+
+// ---------------------------------------------------------------------------
+// Fold-state store — survives widget re-renders within a session
+// keyed by directive.from (document offset of the opening fence)
+// ---------------------------------------------------------------------------
+
+const foldState = new Map<number, boolean>() // true = collapsed
+
+const FOLD_STORAGE_KEY = 'obsidian-directives:fold'
+
+function foldPersistKey(d: ParsedDirective): string {
+  return `${d.name}:${d.label ?? ''}:${d.from}`
+}
+
+function loadFoldState(d: ParsedDirective): boolean {
+  try {
+    const raw = localStorage.getItem(FOLD_STORAGE_KEY)
+    if (!raw) return false
+    const store = JSON.parse(raw) as Record<string, boolean>
+    return store[foldPersistKey(d)] ?? false
+  } catch { return false }
+}
+
+function saveFoldState(d: ParsedDirective, collapsed: boolean): void {
+  try {
+    const raw = localStorage.getItem(FOLD_STORAGE_KEY)
+    const store: Record<string, boolean> = raw ? JSON.parse(raw) : {}
+    if (collapsed) {
+      store[foldPersistKey(d)] = true
+    } else {
+      delete store[foldPersistKey(d)]
+    }
+    localStorage.setItem(FOLD_STORAGE_KEY, JSON.stringify(store))
+  } catch { /* ignore */ }
+}
+
+// ---------------------------------------------------------------------------
+// Fold mechanism — CM6-native approach
+//
+// Foldable directives are split into two decorations:
+//   1. Non-block Decoration.replace() on the opening line → FoldIndicatorWidget
+//      This keeps the opening line as a real .cm-line element, letting us inject
+//      the fold button as an inline child — same mechanism as Obsidian heading folds.
+//   2. Block Decoration.replace() on the body+closing → the inner widget (or empty when collapsed)
+// ---------------------------------------------------------------------------
+
+export const foldEffect = StateEffect.define<{ from: number; collapsed: boolean }>()
+
+// Inline widget that replaces the opening `:::directive` line text.
+// If the inner widget exposes toHeaderDOM(), it renders the header here on the
+// opening .cm-line with the fold button to the left. Otherwise it renders a
+// zero-height span that just hosts the fold button in the left margin.
+class FoldIndicatorWidget extends WidgetType {
+  private readonly collapsed: boolean
+
+  constructor(
+    private readonly directive: ParsedDirective,
+    private readonly inner: WidgetType | null = null,
+  ) {
+    super()
+    this.collapsed = foldState.get(directive.from) ?? loadFoldState(directive)
+  }
+
+  eq(other: WidgetType): boolean {
+    if (!(other instanceof FoldIndicatorWidget)) return false
+    if (other.directive.from !== this.directive.from) return false
+    if (other.collapsed !== this.collapsed) return false
+    if (this.inner === null && other.inner === null) return true
+    if (this.inner === null || other.inner === null) return false
+    return this.inner.eq(other.inner)
+  }
+
+  private makeFoldBtn(view: EditorView): HTMLElement {
+    const btn = activeDocument.createElement('span')
+    btn.className = 'directive-foldable__toggle'
+    if (this.collapsed) btn.classList.add('directive-foldable__toggle--collapsed')
+    setIcon(btn, 'right-triangle')
+    btn.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const nowCollapsed = !btn.classList.contains('directive-foldable__toggle--collapsed')
+      foldState.set(this.directive.from, nowCollapsed)
+      saveFoldState(this.directive, nowCollapsed)
+      // Capture the header's screen Y so we can compensate if the fold changes layout above it.
+      const coordsBefore = view.coordsAtPos(this.directive.from)
+      view.dispatch({ effects: foldEffect.of({ from: this.directive.from, collapsed: nowCollapsed }) })
+      if (coordsBefore) {
+        requestAnimationFrame(() => {
+          const coordsAfter = view.coordsAtPos(this.directive.from)
+          if (coordsAfter) {
+            const delta = coordsAfter.top - coordsBefore.top
+            if (Math.abs(delta) > 1) view.scrollDOM.scrollTop += delta
+          }
+        })
+      }
+    })
+    return btn
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const inner = this.inner as (WidgetType & { toHeaderDOM?: (v: EditorView) => HTMLElement }) | null
+
+    if (inner?.toHeaderDOM) {
+      // Render header inline on the opening line, fold button to the left
+      const wrap = activeDocument.createElement('span')
+      wrap.className = 'directive-fold-header'
+      wrap.contentEditable = 'false'
+      wrap.appendChild(this.makeFoldBtn(view))
+      wrap.appendChild(inner.toHeaderDOM(view))
+      return wrap
+    }
+
+    // Fallback: zero-height span, fold button only
+    const el = activeDocument.createElement('span')
+    el.className = 'directive-fold-indicator'
+    el.contentEditable = 'false'
+    el.appendChild(this.makeFoldBtn(view))
+    return el
+  }
+}
+
+// Wraps the inner widget and adds the collapsed class when folded,
+// so CSS can hide the body content while keeping the header visible.
+class FoldableBodyWidget extends WidgetType {
+  constructor(
+    private readonly inner: WidgetType,
+    private readonly directive: ParsedDirective,
+    private readonly collapsed: boolean,
+  ) { super() }
+
+  eq(other: WidgetType): boolean {
+    return (
+      other instanceof FoldableBodyWidget &&
+      other.directive.from === this.directive.from &&
+      other.collapsed === this.collapsed &&
+      this.inner.eq(other.inner)
+    )
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const inner = this.inner as WidgetType & { toBodyDOM?: (v: EditorView) => HTMLElement }
+    if (inner.toBodyDOM) {
+      if (this.collapsed) {
+        const empty = activeDocument.createElement('div')
+        empty.style.display = 'none'
+        return empty
+      }
+      return inner.toBodyDOM(view)
+    }
+    const el = this.inner.toDOM(view)
+    if (this.collapsed) el.classList.add('directive-foldable--collapsed')
+    return el
+  }
+
+  destroy(dom: HTMLElement): void {
+    this.inner.destroy(dom)
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Fallback widget — rendered for unrecognized directive names
@@ -93,6 +253,17 @@ class FallbackWidget extends WidgetType {
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/** True if the given position falls inside any CM6 folded range. */
+function posInFold(state: EditorState, pos: number): boolean {
+  let inside = false
+  const cursor = foldedRanges(state).iter()
+  while (cursor.value !== null) {
+    if (pos >= cursor.from && pos <= cursor.to) { inside = true; break }
+    cursor.next()
+  }
+  return inside
+}
+
 /** True if any cursor selection overlaps [from, to]. */
 function cursorOverlaps(
   state: EditorState,
@@ -122,6 +293,24 @@ function buildBlockDecorations(
       .filter(d => d.type !== 'text')
       .sort((a, b) => a.from - b.from)
 
+    // Prune stale entries from the in-memory fold cache (directives removed/moved).
+    const activeFroms = new Set(ordered.map(d => d.from))
+    for (const key of foldState.keys()) {
+      if (!activeFroms.has(key)) foldState.delete(key)
+    }
+
+    // Let each handler prune its own per-position state.
+    const handlerActiveFroms = new Map<string, Set<number>>()
+    for (const d of ordered) {
+      const h = registry.get(d.name)
+      if (!h?.pruneState) continue
+      if (!handlerActiveFroms.has(d.name)) handlerActiveFroms.set(d.name, new Set())
+      handlerActiveFroms.get(d.name)!.add(d.from)
+    }
+    for (const [name, froms] of handlerActiveFroms) {
+      registry.get(name)?.pruneState?.(froms)
+    }
+
     for (const directive of ordered) {
       // Snap to exact CM6 line boundaries — required for block: true.
       const fromLine = state.doc.lineAt(directive.from)
@@ -148,7 +337,7 @@ function buildBlockDecorations(
           }))
           // Action widget goes at end of opening fence line, right after its
           // line decoration (must be added here to maintain ascending order).
-          if (line.from === fromLine.from && handler.buildActionWidget) {
+          if (line.from === fromLine.from && handler.buildActionWidget && !posInFold(state, fromLine.from)) {
             try {
               const actionWidget = handler.buildActionWidget(directive, state)
               if (actionWidget) {
@@ -198,7 +387,21 @@ function buildBlockDecorations(
         widget = new FallbackWidget(directive)
       }
 
-      builder.add(from, to, Decoration.replace({ widget, block: true }))
+      const hasSplit = typeof (widget as unknown as Record<string, unknown>)['toHeaderDOM'] === 'function'
+      if (hasSplit) {
+        // Widget supports split rendering: header on the opening .cm-line, body as block below.
+        const openingLine = state.doc.lineAt(from)
+        const bodyStart = openingLine.to + 1
+        const collapsed = foldState.get(from) ?? loadFoldState(directive)
+
+        builder.add(from, openingLine.to, Decoration.replace({ widget: new FoldIndicatorWidget(directive, widget) }))
+
+        if (bodyStart <= to) {
+          builder.add(bodyStart, to, Decoration.replace({ widget: new FoldableBodyWidget(widget, directive, collapsed), block: true }))
+        }
+      } else {
+        builder.add(from, to, Decoration.replace({ widget, block: true }))
+      }
     }
 
     return builder.finish()
@@ -277,9 +480,7 @@ export function createDirectiveExtension(registry: DirectiveRegistry): Extension
     },
 
     update(decos: DecorationSet, tr: Transaction): DecorationSet {
-      // Rebuild when document content or cursor selection changes.
-      // Otherwise, map existing decoration positions through document changes.
-      if (tr.docChanged || tr.selection !== undefined) {
+      if (tr.docChanged || tr.selection !== undefined || tr.effects.some(e => e.is(foldEffect) || e.is(cmFoldEffect) || e.is(cmUnfoldEffect))) {
         return buildBlockDecorations(tr.state, registry)
       }
       return decos.map(tr.changes)

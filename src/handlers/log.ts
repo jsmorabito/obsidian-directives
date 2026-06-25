@@ -145,7 +145,13 @@ function headingFoldRanges(
       // Ask each registered fold service for the canonical range at this line.
       for (const fn of state.facet(foldService)) {
         const r = fn(state, line.from, line.to)
-        if (r) { ranges.push(r); break }
+        if (r) {
+          // Clamp to directive body — foldService is unaware of ::: fences and
+          // may extend the last heading's range past the closing fence into the
+          // next directive, which would suppress that directive's action widget.
+          ranges.push({ from: r.from, to: Math.min(r.to, closeLine.from - 1) })
+          break
+        }
       }
     }
     if (line.to + 1 > doc.length) break
@@ -264,6 +270,7 @@ function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
 interface SearchState { query: string; open: boolean }
 const searchStateMap = new Map<number, SearchState>()
 
+
 // ---------------------------------------------------------------------------
 // LogActionsWidget — inline at end of the opening fence line
 // ---------------------------------------------------------------------------
@@ -294,7 +301,7 @@ class LogActionsWidget extends WidgetType {
     dateInput.type = 'date'
     dateInput.className = 'directive-log-actions-date-input'
     dateInput.value = todayISO()
-    dateInput.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    dateInput.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     dateInput.addEventListener('change', () => {
       const picked = dateInput.value
       if (picked) insertNewEntry(view, this.directive, this.settings, picked)
@@ -305,14 +312,14 @@ class LogActionsWidget extends WidgetType {
     calBtn.className = 'clickable-icon directive-log-actions-btn'
     calBtn.setAttribute('aria-label', 'Pick date for new log entry')
     setIcon(calBtn, 'calendar')
-    calBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    calBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     calBtn.addEventListener('click', () => dateInput.showPicker())
 
     const newBtn = activeDocument.createElement('button')
     newBtn.className = 'clickable-icon directive-log-actions-btn'
     newBtn.setAttribute('aria-label', 'Add log entry for today')
     setIcon(newBtn, 'plus')
-    newBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    newBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     newBtn.addEventListener('click', () => insertNewEntry(view, this.directive, this.settings))
 
     const foldBtn = activeDocument.createElement('button')
@@ -321,7 +328,7 @@ class LogActionsWidget extends WidgetType {
     const initiallyFolded = anyFolded(view, this.directive)
     setIcon(foldBtn, initiallyFolded ? 'chevrons-up-down' : 'chevrons-down-up')
     foldBtn.setAttribute('aria-label', initiallyFolded ? 'Expand all log entries' : 'Collapse all log entries')
-    foldBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    foldBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     foldBtn.addEventListener('click', () => {
       const didCollapse = toggleFoldAll(view, this.directive)
       setIcon(foldBtn, didCollapse ? 'chevrons-up-down' : 'chevrons-down-up')
@@ -341,7 +348,7 @@ class LogActionsWidget extends WidgetType {
       searchInput.value = savedSearch.query
       applySearchFilter(view, this.directive, savedSearch.query)
     }
-    searchInput.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    searchInput.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     searchInput.addEventListener('keydown', (e: KeyboardEvent) => {
       e.stopPropagation()
       if (e.key === 'Escape') {
@@ -361,7 +368,7 @@ class LogActionsWidget extends WidgetType {
     searchBtn.className = 'clickable-icon directive-log-actions-btn'
     searchBtn.setAttribute('aria-label', 'Search log entries')
     setIcon(searchBtn, 'search')
-    searchBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    searchBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     searchBtn.addEventListener('click', () => {
       const isOpen = searchInput.classList.toggle('is-open')
       if (isOpen) {
@@ -374,12 +381,23 @@ class LogActionsWidget extends WidgetType {
       }
     })
 
+    const editBtn = activeDocument.createElement('button')
+    editBtn.className = 'clickable-icon directive-log-actions-btn'
+    editBtn.setAttribute('aria-label', 'Edit this block')
+    setIcon(editBtn, 'code-2')
+    editBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    editBtn.addEventListener('click', () => {
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+
     wrap.appendChild(dateInput)
     wrap.appendChild(searchInput)
     wrap.appendChild(searchBtn)
     wrap.appendChild(foldBtn)
     wrap.appendChild(calBtn)
     wrap.appendChild(newBtn)
+    wrap.appendChild(editBtn)
 
     return wrap
   }
@@ -427,6 +445,12 @@ export function createLogHandler(_app: unknown, settings: DirectivesSettings): D
 
     buildActionWidget(directive: ParsedDirective, _state: EditorState): WidgetType {
       return new LogActionsWidget(directive, settings)
+    },
+
+    pruneState(activeFroms: Set<number>): void {
+      for (const key of searchStateMap.keys()) {
+        if (!activeFroms.has(key)) searchStateMap.delete(key)
+      }
     },
 
     buildHintWidget(directive: ParsedDirective, _state: EditorState): WidgetType | null {

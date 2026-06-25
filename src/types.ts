@@ -138,6 +138,13 @@ export interface DirectiveHandler {
   buildHintWidget?(directive: ParsedDirective, state: EditorState): WidgetType | null
 
   /**
+   * Called once per decoration rebuild with the set of document offsets for
+   * all currently active directives of this type. Handlers can use this to
+   * prune stale in-memory state keyed by directive position.
+   */
+  pruneState?(activeFroms: Set<number>): void
+
+  /**
    * Optional: return the initial body text to insert when this directive is
    * selected from the autocomplete suggest.  The returned string is placed
    * between the opening fence and the blank cursor line.

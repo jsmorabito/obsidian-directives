@@ -131,6 +131,23 @@ export function applyFilter(tasks: Task[], filter: FilterMode): Task[] {
  * Handles key=val and key="val with spaces" forms.
  * Pass value=null to remove the key entirely.
  */
+function setDirectiveLabel(view: EditorView, directive: ParsedDirective, label: string | null): void {
+  const line = view.state.doc.lineAt(directive.from)
+  const text = line.text
+  // Match existing [label] bracket
+  const bracketMatch = /\[([^\]]*)\]/.exec(text)
+  if (bracketMatch) {
+    const from = line.from + (bracketMatch.index ?? 0)
+    const to   = from + bracketMatch[0].length
+    view.dispatch({ changes: { from, to, insert: label !== null ? `[${label}]` : '' } })
+  } else if (label !== null) {
+    // Insert [label] after the fence name (e.g. after ":::checklist")
+    const nameMatch = /^(:+)(\w[\w-]*)/.exec(text)
+    const insertAt  = nameMatch ? line.from + nameMatch[0].length : line.to
+    view.dispatch({ changes: { from: insertAt, insert: `[${label}]` } })
+  }
+}
+
 function setDirectiveAttr(
   view: EditorView,
   directive: ParsedDirective,
@@ -364,8 +381,32 @@ class ChecklistWidget extends DirectiveWidget {
   }
 
   toDOM(view: EditorView): HTMLElement {
+    const outer = activeDocument.createElement('div')
+    outer.className = 'directive-checklist__outer'
+
+    outer.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+
+    void this.buildContent(outer, view)
+    return outer
+  }
+
+  toHeaderDOM(view: EditorView): HTMLElement {
+    const header = this.buildHeaderEl(view)
+    header.addEventListener('mousedown', (e: MouseEvent) => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+    return header
+  }
+
+  toBodyDOM(view: EditorView): HTMLElement {
     const wrap = activeDocument.createElement('div')
-    wrap.className = 'directive-widget directive-widget--checklist'
+    wrap.className = 'directive-widget directive-widget--checklist directive-widget--body-only'
 
     wrap.addEventListener('mousedown', (e: MouseEvent) => {
       e.preventDefault()
@@ -373,7 +414,7 @@ class ChecklistWidget extends DirectiveWidget {
       view.focus()
     })
 
-    void this.buildContent(wrap, view)
+    void this.buildBodyContent(wrap, view)
     return wrap
   }
 
@@ -393,42 +434,28 @@ class ChecklistWidget extends DirectiveWidget {
     view.focus()
   }
 
-  private async buildContent(wrap: HTMLElement, view: EditorView): Promise<void> {
-    // Tear down any subscriptions from a previous render before re-registering.
-    for (const fn of this.cleanups) fn()
-    this.cleanups = []
-
-    wrap.empty()
-
+  private buildHeaderEl(view: EditorView): HTMLElement {
     const label      = this.directive.label
-    const fromAttr   = this.directive.attributes['from'] ?? ''
-    const whereAttr  = this.directive.attributes['where'] ?? ''
     const filterAttr = (this.directive.attributes['filter'] ?? 'all') as FilterMode
-    const filter     = (['todo', 'done', 'all'] as const).includes(filterAttr) ? filterAttr : 'all'
-    const where      = parseWhere(whereAttr)
+    const grouped    = this.directive.attributes['group'] === 'true'
 
-    // Header row — label + action buttons
     const header = activeDocument.createElement('div')
     header.className = 'directive-checklist__header'
 
     const title = activeDocument.createElement('span')
     title.className = 'directive-checklist__title'
-    title.textContent = label ?? 'Checklist'
+    title.textContent = label ?? ''
     header.appendChild(title)
 
     const actions = activeDocument.createElement('span')
     actions.className = 'directive-checklist__actions'
 
-    // Filter cycle button — cycles all → todo → done → all
-    const grouped = this.directive.attributes['group'] === 'true'
-
-    // Group toggle button
     const groupBtn = activeDocument.createElement('button')
     groupBtn.className = 'clickable-icon directive-checklist__action-btn'
     groupBtn.setAttribute('aria-label', grouped ? 'Ungroup tasks' : 'Group by source')
     setIcon(groupBtn, grouped ? 'layers' : 'list')
     groupBtn.classList.toggle('is-active', grouped)
-    groupBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    groupBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     groupBtn.addEventListener('click', () => {
       setDirectiveAttr(view, this.directive, 'group', grouped ? null : 'true')
     })
@@ -443,12 +470,11 @@ class ChecklistWidget extends DirectiveWidget {
     filterBtn.setAttribute('aria-label', `Filter: ${filterLabels[currentFilter]}`)
     filterBtn.dataset['filter'] = currentFilter
     setIcon(filterBtn, filterIcons[currentFilter])
-    // Small text badge showing current filter
     const filterBadge = activeDocument.createElement('span')
     filterBadge.className = 'directive-checklist__filter-badge'
     filterBadge.textContent = filterLabels[currentFilter]
     filterBtn.appendChild(filterBadge)
-    filterBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    filterBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     filterBtn.addEventListener('click', () => {
       const idx  = filterCycle.indexOf(currentFilter)
       const next = filterCycle[(idx + 1) % filterCycle.length] ?? 'all'
@@ -456,12 +482,11 @@ class ChecklistWidget extends DirectiveWidget {
     })
     actions.appendChild(filterBtn)
 
-    // Source button — reveals an inline input to add a file path to from=
     const sourceBtn = activeDocument.createElement('button')
     sourceBtn.className = 'clickable-icon directive-checklist__action-btn'
     sourceBtn.setAttribute('aria-label', 'Add source file')
     setIcon(sourceBtn, 'file-plus')
-    sourceBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    sourceBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     sourceBtn.addEventListener('click', () => {
       sourceBtn.classList.add('directive-hidden')
       const input = activeDocument.createElement('input')
@@ -471,7 +496,11 @@ class ChecklistWidget extends DirectiveWidget {
       input.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
       input.addEventListener('keydown', (e: KeyboardEvent) => {
         e.stopPropagation()
-        if (e.key === 'Escape') { suggest.close(); void this.buildContent(wrap, view) }
+        if (e.key === 'Escape') {
+          suggest.close()
+          input.remove()
+          sourceBtn.classList.remove('directive-hidden')
+        }
       })
       const suggest = new FileSuggest(this.app, input, (file) => {
         addSourcePath(view, this.directive, file.path)
@@ -485,18 +514,36 @@ class ChecklistWidget extends DirectiveWidget {
     addBtn.className = 'clickable-icon directive-checklist__action-btn'
     addBtn.setAttribute('aria-label', 'Add task')
     setIcon(addBtn, 'plus')
-    addBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    addBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     addBtn.addEventListener('click', () => this.insertInlineTask(view))
     actions.appendChild(addBtn)
 
-    // 3-dots menu for less-common options
     const moreBtn = activeDocument.createElement('button')
     moreBtn.className = 'clickable-icon directive-checklist__action-btn'
     moreBtn.setAttribute('aria-label', 'More options')
     setIcon(moreBtn, 'more-horizontal')
-    moreBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    moreBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     moreBtn.addEventListener('click', (e: MouseEvent) => {
       const menu = new Menu()
+
+      const currentLabel = this.directive.label ?? ''
+      menu.addItem(item =>
+        item
+          .setTitle(currentLabel ? `Label: ${currentLabel}` : 'Set label…')
+          .setIcon('tag')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Set label',
+              'Label',
+              'e.g. Work Tasks',
+              currentLabel,
+              val => setDirectiveLabel(view, this.directive, val || null),
+            ).open()
+          })
+      )
+
+      menu.addSeparator()
 
       const currentPageSize = this.directive.attributes['pageSize'] ?? ''
       menu.addItem(item =>
@@ -582,8 +629,32 @@ class ChecklistWidget extends DirectiveWidget {
     })
     actions.appendChild(moreBtn)
 
+    const editBtn = activeDocument.createElement('button')
+    editBtn.className = 'clickable-icon directive-checklist__action-btn'
+    editBtn.setAttribute('aria-label', 'Edit this block')
+    setIcon(editBtn, 'code-2')
+    editBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    editBtn.addEventListener('click', () => {
+      view.dispatch({ selection: { anchor: this.directive.from } })
+      view.focus()
+    })
+    actions.appendChild(editBtn)
+
     header.appendChild(actions)
-    wrap.appendChild(header)
+    return header
+  }
+
+  private async buildBodyContent(bodyEl: HTMLElement, view: EditorView): Promise<void> {
+    for (const fn of this.cleanups) fn()
+    this.cleanups = []
+    bodyEl.empty()
+
+    const fromAttr   = this.directive.attributes['from'] ?? ''
+    const whereAttr  = this.directive.attributes['where'] ?? ''
+    const filterAttr = (this.directive.attributes['filter'] ?? 'all') as FilterMode
+    const filter     = (['todo', 'done', 'all'] as const).includes(filterAttr) ? filterAttr : 'all'
+    const where      = parseWhere(whereAttr)
+    const grouped    = this.directive.attributes['group'] === 'true'
 
     // Resolve source entries — each may be a file path or a #tag
     const sourceEntries = fromAttr
@@ -617,7 +688,12 @@ class ChecklistWidget extends DirectiveWidget {
         }
         watchedPaths.add(file.path)
         const content = await this.app.vault.read(file)
-        allTasks = allTasks.concat(parseTasks(content, file.path))
+        // Exclude tasks nested inside :::checklist blocks — they are captured
+        // by the inline body pass and would otherwise appear twice when the
+        // source file is the same file that hosts this directive.
+        allTasks = allTasks.concat(
+          parseTasks(content, file.path).filter(t => t.directiveContext !== 'checklist')
+        )
       }
     }
 
@@ -653,7 +729,7 @@ class ChecklistWidget extends DirectiveWidget {
         empty.appendChild(kbd)
         empty.appendChild(rest)
       }
-      wrap.appendChild(empty)
+      bodyEl.appendChild(empty)
       return
     }
 
@@ -666,7 +742,6 @@ class ChecklistWidget extends DirectiveWidget {
       : filtered
 
     if (grouped && sourceEntries.length > 0) {
-      // Group tasks by source page
       const groups = new Map<string, Task[]>()
       for (const task of paginated) {
         const key = task.sourcePath ?? ''
@@ -689,18 +764,18 @@ class ChecklistWidget extends DirectiveWidget {
         const list = activeDocument.createElement('div')
         list.className = 'directive-checklist__list'
         for (const task of tasks) {
-          list.appendChild(this.buildRow(task, wrap, view, true))
+          list.appendChild(this.buildRow(task, bodyEl, view, true))
         }
         section.appendChild(list)
-        wrap.appendChild(section)
+        bodyEl.appendChild(section)
       }
     } else {
       const list = activeDocument.createElement('div')
       list.className = 'directive-checklist__list'
       for (const task of paginated) {
-        list.appendChild(this.buildRow(task, wrap, view, false))
+        list.appendChild(this.buildRow(task, bodyEl, view, false))
       }
-      wrap.appendChild(list)
+      bodyEl.appendChild(list)
     }
 
     // Pagination footer
@@ -712,10 +787,10 @@ class ChecklistWidget extends DirectiveWidget {
       prevBtn.className = 'clickable-icon directive-checklist__page-btn'
       prevBtn.disabled = this.page === 0
       setIcon(prevBtn, 'chevron-left')
-      prevBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      prevBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       prevBtn.addEventListener('click', () => {
         this.page = Math.max(0, this.page - 1)
-        void this.buildContent(wrap, view)
+        void this.buildBodyContent(bodyEl, view)
       })
 
       const pageLabel = activeDocument.createElement('span')
@@ -726,36 +801,42 @@ class ChecklistWidget extends DirectiveWidget {
       nextBtn.className = 'clickable-icon directive-checklist__page-btn'
       nextBtn.disabled = this.page >= totalPages - 1
       setIcon(nextBtn, 'chevron-right')
-      nextBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+      nextBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
       nextBtn.addEventListener('click', () => {
         this.page = Math.min(totalPages - 1, this.page + 1)
-        void this.buildContent(wrap, view)
+        void this.buildBodyContent(bodyEl, view)
       })
 
       footer.appendChild(prevBtn)
       footer.appendChild(pageLabel)
       footer.appendChild(nextBtn)
-      wrap.appendChild(footer)
+      bodyEl.appendChild(footer)
     }
 
-    // Subscribe to vault changes so the widget stays in sync.
-    // For tag sources we also re-check on metadata-cache changes since a newly
-    // tagged file may not yet be in watchedPaths.
     const onModify = (file: TAbstractFile) => {
       if (!(file instanceof TFile)) return
-      if (watchedPaths.has(file.path)) void this.buildContent(wrap, view)
+      if (watchedPaths.has(file.path)) void this.buildBodyContent(bodyEl, view)
     }
     const hasTagSource = sourceEntries.some(s => s.startsWith('#'))
     const modRef = this.app.vault.on('modify', onModify)
     this.cleanups.push(() => this.app.vault.offref(modRef))
     if (hasTagSource) {
-      // Re-aggregate when any file's metadata changes — a newly tagged file
-      // may not be in watchedPaths yet. Debounced to avoid rapid rebuilds
-      // during vault indexing bursts.
-      const debouncedRebuild = debounce(() => { void this.buildContent(wrap, view) }, 300)
+      const debouncedRebuild = debounce(() => { void this.buildBodyContent(bodyEl, view) }, 300)
       const cacheRef = this.app.metadataCache.on('changed', debouncedRebuild)
       this.cleanups.push(() => this.app.metadataCache.offref(cacheRef))
     }
+  }
+
+  private async buildContent(outer: HTMLElement, view: EditorView): Promise<void> {
+    outer.empty()
+    outer.appendChild(this.buildHeaderEl(view))
+    const card = activeDocument.createElement('div')
+    card.className = 'directive-widget directive-widget--checklist'
+    card.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    outer.appendChild(card)
+    const bodyEl = activeDocument.createElement('div')
+    card.appendChild(bodyEl)
+    await this.buildBodyContent(bodyEl, view)
   }
 
   private buildRow(task: Task, wrap: HTMLElement, view: EditorView, showCtxBadge = false): HTMLElement {
@@ -800,14 +881,14 @@ class ChecklistWidget extends DirectiveWidget {
     editBtn.className = 'clickable-icon directive-checklist__row-btn'
     editBtn.setAttribute('aria-label', 'Edit task')
     setIcon(editBtn, 'pencil')
-    editBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    editBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     editBtn.addEventListener('click', () => this.makeEditable(textEl, task, wrap, view))
 
     const jumpBtn = activeDocument.createElement('button')
     jumpBtn.className = 'clickable-icon directive-checklist__row-btn'
     jumpBtn.setAttribute('aria-label', 'Jump to source')
     setIcon(jumpBtn, 'arrow-right')
-    jumpBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
+    jumpBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     jumpBtn.addEventListener('click', () => void this.jumpToTask(task, view))
 
     rowActions.appendChild(editBtn)
@@ -833,7 +914,7 @@ class ChecklistWidget extends DirectiveWidget {
     }
   }
 
-  private async toggleTask(task: Task, newChecked: boolean, wrap: HTMLElement, view: EditorView): Promise<void> {
+  private async toggleTask(task: Task, newChecked: boolean, bodyEl: HTMLElement, view: EditorView): Promise<void> {
     task.checked = newChecked
     if (task.sourcePath === null) {
       // Inline body — write via CM dispatch; vault modify event won't fire, so rebuild manually.
@@ -841,7 +922,7 @@ class ChecklistWidget extends DirectiveWidget {
       view.dispatch({
         changes: { from: task.checkboxOffset, to: task.checkboxOffset + 1, insert: replacement },
       })
-      void this.buildContent(wrap, view)
+      void this.buildBodyContent(bodyEl, view)
     } else {
       // External file — vault modify event will fire and trigger buildContent via the watcher.
       const file = this.app.vault.getAbstractFileByPath(task.sourcePath)
@@ -857,7 +938,7 @@ class ChecklistWidget extends DirectiveWidget {
   private makeEditable(
     textEl: HTMLElement,
     task: Task,
-    wrap: HTMLElement,
+    bodyEl: HTMLElement,
     view: EditorView,
   ): void {
     const input = activeDocument.createElement('input')
@@ -874,7 +955,7 @@ class ChecklistWidget extends DirectiveWidget {
     const commit = async () => {
       const newText = input.value.trim()
       if (newText === task.text || !newText) {
-        void this.buildContent(wrap, view)
+        void this.buildBodyContent(bodyEl, view)
         return
       }
       if (task.sourcePath === null) {
@@ -882,7 +963,7 @@ class ChecklistWidget extends DirectiveWidget {
         view.dispatch({
           changes: { from: task.textOffset, to: task.textOffset + task.text.length, insert: newText },
         })
-        void this.buildContent(wrap, view)
+        void this.buildBodyContent(bodyEl, view)
       } else {
         // External file — vault modify event triggers the rebuild.
         const file = this.app.vault.getAbstractFileByPath(task.sourcePath)
@@ -899,7 +980,7 @@ class ChecklistWidget extends DirectiveWidget {
     input.addEventListener('keydown', (e: KeyboardEvent) => {
       e.stopPropagation()
       if (e.key === 'Enter') { e.preventDefault(); void commit() }
-      if (e.key === 'Escape') { cancelled = true; void this.buildContent(wrap, view) }
+      if (e.key === 'Escape') { cancelled = true; void this.buildBodyContent(bodyEl, view) }
     })
   }
 
