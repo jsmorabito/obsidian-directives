@@ -353,6 +353,73 @@ class PromptModal extends Modal {
 }
 
 // ---------------------------------------------------------------------------
+// File picker modal (used by the 3-dots menu)
+// ---------------------------------------------------------------------------
+
+class FilePickerModal extends Modal {
+  private input!: HTMLInputElement
+  private selected: TFile[] = []
+  private listEl!: HTMLElement
+
+  constructor(
+    app: App,
+    private readonly onConfirm: (files: TFile[]) => void,
+  ) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText('Add source files')
+    const { contentEl } = this
+
+    this.listEl = contentEl.createDiv({ cls: 'directive-file-picker__chips' })
+    this.renderChips()
+
+    new Setting(contentEl)
+      .setName('File')
+      .addText(text => {
+        this.input = text.inputEl
+        text.setPlaceholder('Search notes…')
+        new FileSuggest(this.app, this.input, (file) => {
+          if (!this.selected.find(f => f.path === file.path)) {
+            this.selected.push(file)
+            this.renderChips()
+          }
+          this.input.value = ''
+          this.input.focus()
+        })
+        this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Escape') this.close()
+        })
+      })
+
+    new Setting(contentEl)
+      .addButton(btn => btn.setButtonText('Add sources').setCta().onClick(() => this.confirm()))
+  }
+
+  private renderChips(): void {
+    this.listEl.empty()
+    for (const file of this.selected) {
+      const chip = this.listEl.createDiv({ cls: 'directive-file-picker__chip' })
+      chip.createSpan({ text: file.basename })
+      const removeBtn = chip.createEl('button', { cls: 'directive-file-picker__chip-remove clickable-icon' })
+      setIcon(removeBtn, 'x')
+      removeBtn.addEventListener('click', () => {
+        this.selected = this.selected.filter(f => f.path !== file.path)
+        this.renderChips()
+      })
+    }
+  }
+
+  private confirm(): void {
+    if (this.selected.length > 0) this.onConfirm(this.selected)
+    this.close()
+  }
+
+  onClose(): void { this.contentEl.empty() }
+}
+
+// ---------------------------------------------------------------------------
 // ChecklistWidget
 // ---------------------------------------------------------------------------
 
@@ -444,24 +511,12 @@ class ChecklistWidget extends DirectiveWidget {
 
     const title = activeDocument.createElement('span')
     title.className = 'directive-checklist__title'
-    title.textContent = label ?? ''
+    title.textContent = label ?? 'Checklist'
     header.appendChild(title)
 
     const actions = activeDocument.createElement('span')
     actions.className = 'directive-checklist__actions'
 
-    const groupBtn = activeDocument.createElement('button')
-    groupBtn.className = 'clickable-icon directive-checklist__action-btn'
-    groupBtn.setAttribute('aria-label', grouped ? 'Ungroup tasks' : 'Group by source')
-    setIcon(groupBtn, grouped ? 'layers' : 'list')
-    groupBtn.classList.toggle('is-active', grouped)
-    groupBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-    groupBtn.addEventListener('click', () => {
-      setDirectiveAttr(view, this.directive, 'group', grouped ? null : 'true')
-    })
-    actions.appendChild(groupBtn)
-
-    const filterCycle: FilterMode[] = ['all', 'todo', 'done']
     const filterLabels: Record<FilterMode, string> = { all: 'All', todo: 'To do', done: 'Done' }
     const filterIcons:  Record<FilterMode, string> = { all: 'list', todo: 'circle', done: 'check-circle' }
     const currentFilter = (['todo', 'done', 'all'] as const).includes(filterAttr) ? filterAttr : 'all'
@@ -469,46 +524,26 @@ class ChecklistWidget extends DirectiveWidget {
     filterBtn.className = 'clickable-icon directive-checklist__action-btn directive-checklist__filter-btn'
     filterBtn.setAttribute('aria-label', `Filter: ${filterLabels[currentFilter]}`)
     filterBtn.dataset['filter'] = currentFilter
-    setIcon(filterBtn, filterIcons[currentFilter])
+    setIcon(filterBtn, 'list-filter')
     const filterBadge = activeDocument.createElement('span')
     filterBadge.className = 'directive-checklist__filter-badge'
     filterBadge.textContent = filterLabels[currentFilter]
     filterBtn.appendChild(filterBadge)
     filterBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-    filterBtn.addEventListener('click', () => {
-      const idx  = filterCycle.indexOf(currentFilter)
-      const next = filterCycle[(idx + 1) % filterCycle.length] ?? 'all'
-      setDirectiveAttr(view, this.directive, 'filter', next)
+    filterBtn.addEventListener('click', (e: MouseEvent) => {
+      const menu = new Menu()
+      ;(['all', 'todo', 'done'] as FilterMode[]).forEach(mode => {
+        menu.addItem(item =>
+          item
+            .setTitle(filterLabels[mode])
+            .setIcon(filterIcons[mode])
+            .setChecked(currentFilter === mode)
+            .onClick(() => setDirectiveAttr(view, this.directive, 'filter', mode === 'all' ? null : mode))
+        )
+      })
+      menu.showAtMouseEvent(e)
     })
     actions.appendChild(filterBtn)
-
-    const sourceBtn = activeDocument.createElement('button')
-    sourceBtn.className = 'clickable-icon directive-checklist__action-btn'
-    sourceBtn.setAttribute('aria-label', 'Add source file')
-    setIcon(sourceBtn, 'file-plus')
-    sourceBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-    sourceBtn.addEventListener('click', () => {
-      sourceBtn.classList.add('directive-hidden')
-      const input = activeDocument.createElement('input')
-      input.type        = 'text'
-      input.placeholder = 'Search notes…'
-      input.className   = 'directive-checklist__edit-input directive-checklist__source-input'
-      input.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
-      input.addEventListener('keydown', (e: KeyboardEvent) => {
-        e.stopPropagation()
-        if (e.key === 'Escape') {
-          suggest.close()
-          input.remove()
-          sourceBtn.classList.remove('directive-hidden')
-        }
-      })
-      const suggest = new FileSuggest(this.app, input, (file) => {
-        addSourcePath(view, this.directive, file.path)
-      })
-      actions.insertBefore(input, sourceBtn)
-      input.focus()
-    })
-    actions.appendChild(sourceBtn)
 
     const addBtn = activeDocument.createElement('button')
     addBtn.className = 'clickable-icon directive-checklist__action-btn'
@@ -525,6 +560,15 @@ class ChecklistWidget extends DirectiveWidget {
     moreBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     moreBtn.addEventListener('click', (e: MouseEvent) => {
       const menu = new Menu()
+
+      menu.addItem(item =>
+        item
+          .setTitle(grouped ? 'Ungroup tasks' : 'Group by source')
+          .setIcon('layers')
+          .onClick(() => setDirectiveAttr(view, this.directive, 'group', grouped ? null : 'true'))
+      )
+
+      menu.addSeparator()
 
       const currentLabel = this.directive.label ?? ''
       menu.addItem(item =>
@@ -582,6 +626,17 @@ class ChecklistWidget extends DirectiveWidget {
               currentWhere,
               val => setDirectiveAttr(view, this.directive, 'where', val),
             ).open()
+          })
+      )
+
+      menu.addItem(item =>
+        item
+          .setTitle('Add file source…')
+          .setIcon('file-plus')
+          .onClick(() => {
+            new FilePickerModal(this.app, (files) => {
+              for (const file of files) addSourcePath(view, this.directive, file.path)
+            }).open()
           })
       )
 

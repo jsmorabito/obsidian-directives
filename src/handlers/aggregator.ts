@@ -25,7 +25,7 @@
  *   not         — Comma-separated tags to permanently exclude.
  */
 
-import { App, TAbstractFile, TFile, setIcon } from 'obsidian'
+import { AbstractInputSuggest, App, Menu, Modal, Setting, TAbstractFile, TFile, prepareFuzzySearch, setIcon } from 'obsidian'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 
@@ -262,6 +262,21 @@ function setDirectiveAttr(
   applyAttrChange(view, line.from, line.text, key, value)
 }
 
+function setDirectiveLabel(view: EditorView, directive: ParsedDirective, label: string | null): void {
+  const line = view.state.doc.lineAt(directive.from)
+  const text = line.text
+  const bracketMatch = /\[([^\]]*)\]/.exec(text)
+  if (bracketMatch) {
+    const from = line.from + (bracketMatch.index ?? 0)
+    const to   = from + bracketMatch[0].length
+    view.dispatch({ changes: { from, to, insert: label !== null ? `[${label}]` : '' } })
+  } else if (label !== null) {
+    const nameMatch = /^(:+)(\w[\w-]*)/.exec(text)
+    const insertAt  = nameMatch ? line.from + nameMatch[0].length : line.to
+    view.dispatch({ changes: { from: insertAt, insert: `[${label}]` } })
+  }
+}
+
 /** Edit an attribute on a specific ::tab line (0-based tabIndex) in the body. */
 function setTabAttr(
   view: EditorView,
@@ -304,6 +319,145 @@ function makeCacheKey(directive: ParsedDirective, tabs: TabDef[]): string {
     return JSON.stringify(tabs.map(t => ({ label: t.label, attrs: t.attrs })))
   }
   return JSON.stringify({ attrs: directive.attributes, label: directive.label })
+}
+
+// ---------------------------------------------------------------------------
+// Fuzzy file suggest + modals (used by the 3-dots menu)
+// ---------------------------------------------------------------------------
+
+class FileSuggest extends AbstractInputSuggest<TFile> {
+  constructor(
+    app: App,
+    inputEl: HTMLInputElement,
+    private readonly onChoose: (file: TFile) => void,
+  ) {
+    super(app, inputEl)
+  }
+
+  getSuggestions(query: string): TFile[] {
+    const fuzzy = prepareFuzzySearch(query)
+    return this.app.vault.getMarkdownFiles()
+      .filter(f => fuzzy(f.path) !== null)
+      .sort((a, b) => {
+        const sa = fuzzy(a.path)?.score ?? -Infinity
+        const sb = fuzzy(b.path)?.score ?? -Infinity
+        return sb - sa
+      })
+      .slice(0, 20)
+  }
+
+  renderSuggestion(file: TFile, el: HTMLElement): void {
+    el.createDiv({ cls: 'suggestion-title', text: file.basename })
+    if (file.parent && file.parent.path !== '/') {
+      el.createDiv({ cls: 'suggestion-note', text: file.parent.path })
+    }
+  }
+
+  selectSuggestion(file: TFile): void {
+    this.close()
+    this.onChoose(file)
+  }
+}
+
+class FilePickerModal extends Modal {
+  private input!: HTMLInputElement
+  private selected: TFile[] = []
+  private listEl!: HTMLElement
+
+  constructor(
+    app: App,
+    private readonly onConfirm: (files: TFile[]) => void,
+  ) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText('Add source files')
+    const { contentEl } = this
+
+    this.listEl = contentEl.createDiv({ cls: 'directive-file-picker__chips' })
+    this.renderChips()
+
+    new Setting(contentEl)
+      .setName('File')
+      .addText(text => {
+        this.input = text.inputEl
+        text.setPlaceholder('Search notes…')
+        new FileSuggest(this.app, this.input, (file) => {
+          if (!this.selected.find(f => f.path === file.path)) {
+            this.selected.push(file)
+            this.renderChips()
+          }
+          this.input.value = ''
+          this.input.focus()
+        })
+        this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Escape') this.close()
+        })
+      })
+
+    new Setting(contentEl)
+      .addButton(btn => btn.setButtonText('Add sources').setCta().onClick(() => this.confirm()))
+  }
+
+  private renderChips(): void {
+    this.listEl.empty()
+    for (const file of this.selected) {
+      const chip = this.listEl.createDiv({ cls: 'directive-file-picker__chip' })
+      chip.createSpan({ text: file.basename })
+      const removeBtn = chip.createEl('button', { cls: 'directive-file-picker__chip-remove clickable-icon' })
+      setIcon(removeBtn, 'x')
+      removeBtn.addEventListener('click', () => {
+        this.selected = this.selected.filter(f => f.path !== file.path)
+        this.renderChips()
+      })
+    }
+  }
+
+  private confirm(): void {
+    if (this.selected.length > 0) this.onConfirm(this.selected)
+    this.close()
+  }
+
+  onClose(): void { this.contentEl.empty() }
+}
+
+class PromptModal extends Modal {
+  private input!: HTMLInputElement
+
+  constructor(
+    app: App,
+    private readonly title: string,
+    private readonly label: string,
+    private readonly placeholder: string,
+    private readonly onConfirm: (value: string) => void,
+  ) {
+    super(app)
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(this.title)
+    new Setting(this.contentEl)
+      .setName(this.label)
+      .addText(text => {
+        this.input = text.inputEl
+        text.setPlaceholder(this.placeholder)
+        this.input.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'Enter') this.confirm()
+          if (e.key === 'Escape') this.close()
+        })
+      })
+    new Setting(this.contentEl)
+      .addButton(btn => btn.setButtonText('Apply').setCta().onClick(() => this.confirm()))
+  }
+
+  private confirm(): void {
+    const val = this.input.value.trim()
+    this.close()
+    if (val) this.onConfirm(val)
+  }
+
+  onClose(): void { this.contentEl.empty() }
 }
 
 // ---------------------------------------------------------------------------
@@ -744,6 +898,127 @@ class AggregatorWidget extends DirectiveWidget {
     refreshBtn.dataset['permanent'] = '1'
     actions.appendChild(refreshBtn)
 
+    const moreBtn = activeDocument.createElement('button')
+    moreBtn.className = 'clickable-icon directive-checklist__action-btn'
+    moreBtn.setAttribute('aria-label', 'More options')
+    setIcon(moreBtn, 'more-horizontal')
+    moreBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    moreBtn.addEventListener('click', (e: MouseEvent) => {
+      const menu = new Menu()
+      const tabs = parseTabDefs(this.directive.body ?? '')
+      const isTabbed = tabs.length > 0
+      const currentAttrs = isTabbed ? (tabs[this.activeTab]?.attrs ?? {}) : this.directive.attributes
+      const currentFrom = currentAttrs['from'] ?? ''
+      const grouped = currentAttrs['group'] === 'true'
+      const onAttrChange = (key: string, value: string | null) => isTabbed
+        ? setTabAttr(view, this.directive, this.activeTab, key, value)
+        : setDirectiveAttr(view, this.directive, key, value)
+
+      const currentLabel = this.directive.label ?? ''
+      menu.addItem(item =>
+        item
+          .setTitle(currentLabel ? `Label: ${currentLabel}` : 'Set label…')
+          .setIcon('tag')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Set label',
+              'Label',
+              'e.g. My Tracker',
+              val => setDirectiveLabel(view, this.directive, val || null),
+            ).open()
+          })
+      )
+
+      menu.addItem(item =>
+        item
+          .setTitle(grouped ? 'Ungroup results' : 'Group by source')
+          .setIcon('layers')
+          .onClick(() => onAttrChange('group', grouped ? null : 'true'))
+      )
+
+      menu.addSeparator()
+
+      menu.addItem(item =>
+        item
+          .setTitle('Add file source…')
+          .setIcon('file-plus')
+          .onClick(() => {
+            new FilePickerModal(this.app, (files) => {
+              const paths = currentFrom ? currentFrom.split(',').map(s => s.trim()).filter(Boolean) : []
+              for (const file of files) {
+                if (!paths.includes(file.path)) paths.push(file.path)
+              }
+              onAttrChange('from', paths.join(', '))
+            }).open()
+          })
+      )
+
+      menu.addItem(item =>
+        item
+          .setTitle('Add tag source…')
+          .setIcon('tag')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Add tag source',
+              'Tag',
+              'e.g. #project or project',
+              (val) => {
+                const tag = val.startsWith('#') ? val : `#${val}`
+                const paths = currentFrom ? currentFrom.split(',').map(s => s.trim()).filter(Boolean) : []
+                if (!paths.includes(tag)) paths.push(tag)
+                onAttrChange('from', paths.join(', '))
+              },
+            ).open()
+          })
+      )
+
+      menu.addSeparator()
+
+      const paginate = currentAttrs['paginate'] === 'true'
+      const currentPageSize = currentAttrs['page-size'] ?? ''
+
+      menu.addItem(item =>
+        item
+          .setTitle(paginate ? 'Disable pagination' : 'Enable pagination')
+          .setIcon('book-open')
+          .setChecked(paginate)
+          .onClick(() => onAttrChange('paginate', paginate ? null : 'true'))
+      )
+
+      menu.addItem(item =>
+        item
+          .setTitle(currentPageSize ? `Page size: ${currentPageSize}` : 'Set page size…')
+          .setIcon('list-ordered')
+          .onClick(() => {
+            new PromptModal(
+              this.app,
+              'Set page size',
+              'Results per page',
+              `e.g. ${DEFAULT_PAGE_SIZE}`,
+              (val) => {
+                const n = parseInt(val, 10)
+                if (n > 0) onAttrChange('page-size', String(n))
+              },
+            ).open()
+          })
+      )
+
+      if (currentPageSize) {
+        menu.addItem(item =>
+          item
+            .setTitle('Remove page size')
+            .setIcon('x')
+            .onClick(() => onAttrChange('page-size', null))
+        )
+      }
+
+      menu.showAtMouseEvent(e)
+    })
+    moreBtn.dataset['permanent'] = '1'
+    actions.appendChild(moreBtn)
+
     const editBtn = activeDocument.createElement('button')
     editBtn.className = 'clickable-icon directive-checklist__action-btn'
     editBtn.setAttribute('aria-label', 'Edit this block')
@@ -771,16 +1046,6 @@ class AggregatorWidget extends DirectiveWidget {
     const filterAttr = (attrs['filter'] ?? 'all') as FilterMode
     const filter: FilterMode = (['all', 'hide-done', 'only-done'] as const).includes(filterAttr) ? filterAttr : 'all'
 
-    // Group toggle
-    const groupBtn = activeDocument.createElement('button')
-    groupBtn.className = 'clickable-icon directive-checklist__action-btn'
-    groupBtn.setAttribute('aria-label', grouped ? 'Ungroup results' : 'Group by source')
-    setIcon(groupBtn, 'layers')
-    groupBtn.classList.toggle('is-active', grouped)
-    groupBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-    groupBtn.addEventListener('click', () => onAttrChange('group', grouped ? null : 'true'))
-    actions.insertBefore(groupBtn, actions.firstChild)
-
     // Filter cycle
     const filterCycle: FilterMode[] = ['all', 'hide-done', 'only-done']
     const filterLabels: Record<FilterMode, string> = { all: 'All', 'hide-done': 'Hide done', 'only-done': 'Only done' }
@@ -800,16 +1065,6 @@ class AggregatorWidget extends DirectiveWidget {
       onAttrChange('filter', next === 'all' ? null : next)
     })
     actions.insertBefore(filterBtn, actions.firstChild)
-
-    // Paginate toggle
-    const paginateBtn = activeDocument.createElement('button')
-    paginateBtn.className = 'clickable-icon directive-checklist__action-btn'
-    paginateBtn.setAttribute('aria-label', paginate ? 'Disable pagination' : 'Enable pagination')
-    setIcon(paginateBtn, 'book-open')
-    paginateBtn.classList.toggle('is-active', paginate)
-    paginateBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-    paginateBtn.addEventListener('click', () => onAttrChange('paginate', paginate ? null : 'true'))
-    actions.insertBefore(paginateBtn, actions.firstChild)
   }
 
   private emptyEl(message: string): HTMLElement {

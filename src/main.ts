@@ -99,15 +99,23 @@ export default class ObsidianDirectivesPlugin extends Plugin
       if (file instanceof TFile && file.extension === 'md') void this.updateLogFileCacheEntry(file)
     }))
 
+    const openAddToLog = (mode: 'note' | 'activity') => {
+      const logFiles = Array.from(this.logFileCache)
+        .map(p => this.app.vault.getAbstractFileByPath(p))
+        .filter((f): f is TFile => f instanceof TFile)
+      new AddToLogModal(this.app, this.settings, logFiles, mode).open()
+    }
+
     this.addCommand({
-      id: 'add-to-log',
-      name: 'Add to log',
-      callback: () => {
-        const logFiles = Array.from(this.logFileCache)
-          .map(p => this.app.vault.getAbstractFileByPath(p))
-          .filter((f): f is TFile => f instanceof TFile)
-        new AddToLogModal(this.app, this.settings, logFiles).open()
-      },
+      id: 'add-note-to-log',
+      name: 'Add note to log',
+      callback: () => openAddToLog('note'),
+    })
+
+    this.addCommand({
+      id: 'add-activity-to-log',
+      name: 'Add activity to log',
+      callback: () => openAddToLog('activity'),
     })
     this.registerEvent(this.app.workspace.on('file-open', () => {
       this.closeLogPopover()

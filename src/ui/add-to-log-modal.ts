@@ -123,14 +123,17 @@ export function insertNoteIntoLog(
 class LogEntryModal extends Modal {
   private dateInput!: HTMLInputElement
   private noteInput!: HTMLInputElement
+  private isActivity: boolean
 
   constructor(
     app: App,
     private readonly file: TFile,
     private readonly settings: DirectivesSettings,
     private readonly onConfirm: (dateISO: string, note: string) => void | Promise<void>,
+    initialMode: 'note' | 'activity' = 'note',
   ) {
     super(app)
+    this.isActivity = initialMode === 'activity'
   }
 
   onOpen(): void {
@@ -138,6 +141,21 @@ class LogEntryModal extends Modal {
     const { contentEl } = this
 
     contentEl.createDiv({ cls: 'add-to-log-desc', text: this.file.basename })
+
+    // Segmented control — Note / Activity
+    const segWrap = contentEl.createDiv({ cls: 'add-to-log-segment' })
+    const noteBtn = segWrap.createEl('button', { text: 'Note', cls: 'add-to-log-segment-btn' })
+    const activityBtn = segWrap.createEl('button', { text: 'Activity', cls: 'add-to-log-segment-btn' })
+
+    const setMode = (activity: boolean) => {
+      this.isActivity = activity
+      noteBtn.toggleClass('is-active', !activity)
+      activityBtn.toggleClass('is-active', activity)
+    }
+
+    setMode(this.isActivity)
+    noteBtn.addEventListener('click', () => setMode(false))
+    activityBtn.addEventListener('click', () => setMode(true))
 
     // Date row
     const dateRow = contentEl.createDiv({ cls: 'add-to-log-field-row' })
@@ -176,8 +194,11 @@ class LogEntryModal extends Modal {
       if (!note) this.noteInput.focus()
       return
     }
+    const finalNote = this.isActivity
+      ? `[activity] ${new Date().toTimeString().slice(0, 5)} ${note}`
+      : note
     this.close()
-    void this.onConfirm(date, note)
+    void this.onConfirm(date, finalNote)
   }
 
   onClose(): void {
@@ -194,6 +215,7 @@ export class AddToLogModal extends FuzzySuggestModal<TFile> {
     app: App,
     private readonly settings: DirectivesSettings,
     private readonly logFiles: TFile[],
+    private readonly initialMode: 'note' | 'activity' = 'note',
   ) {
     super(app)
     this.setPlaceholder('Search for a note with a log...')
@@ -222,7 +244,7 @@ export class AddToLogModal extends FuzzySuggestModal<TFile> {
   onChooseItem(file: TFile): void {
     new LogEntryModal(this.app, file, this.settings, async (dateISO, note) => {
       await this.addNote(file, dateISO, note)
-    }).open()
+    }, this.initialMode).open()
   }
 
   private async addNote(file: TFile, dateISO: string, note: string): Promise<void> {

@@ -335,15 +335,26 @@ class LogActionsWidget extends WidgetType {
       foldBtn.setAttribute('aria-label', didCollapse ? 'Expand all log entries' : 'Collapse all log entries')
     })
 
-    // Search — button always visible, input slides open beside it.
+    // Search — button always visible, container slides open beside it.
     // State (query + open) is persisted in searchStateMap across widget rebuilds.
     const savedSearch = searchStateMap.get(this.directive.from) ?? { query: '', open: false }
+
+    const searchWrap = activeDocument.createElement('div')
+    searchWrap.className = 'directive-log-search-wrap'
+    if (savedSearch.open) {
+      searchWrap.classList.add('is-open')
+      wrap.classList.add('is-search-open')
+    }
+
+    const searchIconEl = activeDocument.createElement('span')
+    searchIconEl.className = 'directive-log-search-icon'
+    setIcon(searchIconEl, 'search')
+    searchWrap.appendChild(searchIconEl)
 
     const searchInput = activeDocument.createElement('input')
     searchInput.type = 'text'
     searchInput.placeholder = 'Search…'
     searchInput.className = 'directive-log-search-input'
-    if (savedSearch.open) searchInput.classList.add('is-open')
     if (savedSearch.query) {
       searchInput.value = savedSearch.query
       applySearchFilter(view, this.directive, savedSearch.query)
@@ -354,7 +365,8 @@ class LogActionsWidget extends WidgetType {
       if (e.key === 'Escape') {
         searchInput.value = ''
         applySearchFilter(view, this.directive, '')
-        searchInput.classList.remove('is-open')
+        searchWrap.classList.remove('is-open')
+        wrap.classList.remove('is-search-open')
         searchInput.blur()
         searchStateMap.set(this.directive.from, { query: '', open: false })
       }
@@ -363,6 +375,7 @@ class LogActionsWidget extends WidgetType {
       applySearchFilter(view, this.directive, searchInput.value)
       searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
     })
+    searchWrap.appendChild(searchInput)
 
     const searchBtn = activeDocument.createElement('button')
     searchBtn.className = 'clickable-icon directive-log-actions-btn'
@@ -370,7 +383,8 @@ class LogActionsWidget extends WidgetType {
     setIcon(searchBtn, 'search')
     searchBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     searchBtn.addEventListener('click', () => {
-      const isOpen = searchInput.classList.toggle('is-open')
+      const isOpen = searchWrap.classList.toggle('is-open')
+      wrap.classList.toggle('is-search-open', isOpen)
       if (isOpen) {
         searchInput.focus()
         searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
@@ -392,7 +406,7 @@ class LogActionsWidget extends WidgetType {
     })
 
     wrap.appendChild(dateInput)
-    wrap.appendChild(searchInput)
+    wrap.appendChild(searchWrap)
     wrap.appendChild(searchBtn)
     wrap.appendChild(foldBtn)
     wrap.appendChild(calBtn)

@@ -623,27 +623,62 @@
   user-select: none;
 }
 
-/* Search input — slides open when .is-open is toggled by the search button */
-.directive-log-search-input {
-  width: 0;
-  min-width: 0;
-  opacity: 0;
-  border: none;
-  border-bottom: 1px solid var(--background-modifier-border);
-  background: transparent;
-  outline: none;
-  font-size: var(--font-ui-small);
-  color: var(--text-normal);
-  padding: 0;
-  transition: width 0.2s ease, opacity 0.2s ease, padding 0.2s ease;
-  pointer-events: none;
+/* When search is open, stretch the action bar to full line width,
+   padding-left in ch units clears the :::log directive text */
+.directive-log-actions.is-search-open {
+  left: 0;
+  padding-left: 8ch;
 }
 
-.directive-log-search-input.is-open {
-  width: 120px;
+/* Search container */
+.directive-log-search-wrap {
+  display: flex;
+  align-items: center;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: width 0.2s ease, opacity 0.15s ease;
+  pointer-events: none;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50px;
+  background: var(--background-primary);
+  padding: 0 var(--size-4-2);
+  box-sizing: border-box;
+  height: 26px;
+}
+
+.directive-log-search-wrap.is-open {
+  flex: 1;
+  width: auto;
   opacity: 1;
-  padding: 0 var(--size-2-2);
   pointer-events: auto;
+  margin-right: var(--size-2-2);
+}
+
+.directive-log-search-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.directive-log-search-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.directive-log-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  padding: 0 var(--size-2-2);
 }
 
 .directive-log-actions-date-input {
@@ -838,6 +873,35 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   padding: var(--size-2-3) var(--size-4-2);
+}
+
+.add-to-log-segment {
+  display: flex;
+  gap: 2px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 2px;
+  margin-bottom: var(--size-4-3);
+}
+
+.add-to-log-segment-btn {
+  flex: 1;
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-interface);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-s) - 1px);
+  padding: var(--size-2-2) var(--size-4-2);
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+}
+
+.add-to-log-segment-btn.is-active {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--shadow-s);
 }
 
 .add-to-log-btn-row {
@@ -1069,6 +1133,37 @@
   font-style: normal;
   color: var(--text-muted);
   pointer-events: none;
+}
+
+.directive-file-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-2-2);
+  margin-bottom: var(--size-4-2);
+  min-height: 0;
+}
+
+.directive-file-picker__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-1);
+  padding: var(--size-2-1) var(--size-2-2);
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+}
+
+.directive-file-picker__chip-remove {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.directive-file-picker__chip-remove svg {
+  width: 12px;
+  height: 12px;
 }
 
 .directive-checklist__source-input {
