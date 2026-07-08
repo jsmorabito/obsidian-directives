@@ -927,6 +927,12 @@
   height: var(--icon-s);
 }
 
+.add-to-log-notice-link {
+  color: var(--text-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* --------------------------------------------------------------------------
    View-log popover
    -------------------------------------------------------------------------- */

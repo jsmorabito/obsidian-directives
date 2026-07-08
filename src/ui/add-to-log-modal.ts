@@ -38,14 +38,15 @@ const LOG_OPEN_RE = /^:::log[^\n]*$/m
  * - If no entry exists for `dateISO`, a new dated entry is created in
  *   chronological (newest-first) order.
  *
- * Returns the modified content string, or null if no :::log block is found.
+ * Returns the modified content and the character offset of the inserted note
+ * line, or null if no :::log block is found.
  */
 export function insertNoteIntoLog(
   content: string,
   dateISO: string,
   noteText: string,
   settings: DirectivesSettings,
-): string | null {
+): { content: string; entryOffset: number } | null {
   const openMatch = LOG_OPEN_RE.exec(content)
   if (!openMatch) return null
 
@@ -96,14 +97,21 @@ export function insertNoteIntoLog(
 
         const absAppend = afterOpen + appendOffset
         const toInsert = `${subPrefix}${noteText}\n`
-        return content.slice(0, absAppend) + toInsert + content.slice(absAppend)
+        return {
+          content: content.slice(0, absAppend) + toInsert + content.slice(absAppend),
+          entryOffset: absAppend + subPrefix.length,
+        }
       }
 
       if (dateISO > existing) {
         // New date is newer — insert a full new entry before this one.
         const absInsert = afterOpen + charCount
-        const toInsert = `${buildDateLine(dateISO, settings)}\n${subPrefix}${noteText}\n`
-        return content.slice(0, absInsert) + toInsert + content.slice(absInsert)
+        const dateLine = `${buildDateLine(dateISO, settings)}\n`
+        const toInsert = `${dateLine}${subPrefix}${noteText}\n`
+        return {
+          content: content.slice(0, absInsert) + toInsert + content.slice(absInsert),
+          entryOffset: absInsert + dateLine.length + subPrefix.length,
+        }
       }
     }
 
@@ -112,8 +120,12 @@ export function insertNoteIntoLog(
 
   // Date is older than all existing entries — append at end of entries.
   const absInsert = afterOpen + charCount
-  const toInsert = `${buildDateLine(dateISO, settings)}\n${subPrefix}${noteText}\n`
-  return content.slice(0, absInsert) + toInsert + content.slice(absInsert)
+  const dateLine = `${buildDateLine(dateISO, settings)}\n`
+  const toInsert = `${dateLine}${subPrefix}${noteText}\n`
+  return {
+    content: content.slice(0, absInsert) + toInsert + content.slice(absInsert),
+    entryOffset: absInsert + dateLine.length + subPrefix.length,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -249,14 +261,25 @@ export class AddToLogModal extends FuzzySuggestModal<TFile> {
 
   private async addNote(file: TFile, dateISO: string, note: string): Promise<void> {
     const content = await this.app.vault.read(file)
-    const updated = insertNoteIntoLog(content, dateISO, note, this.settings)
+    const result = insertNoteIntoLog(content, dateISO, note, this.settings)
 
-    if (updated === null) {
+    if (result === null) {
       new Notice(`No :::log block found in "${file.basename}"`)
       return
     }
 
-    await this.app.vault.modify(file, updated)
-    new Notice(`Added to ${file.basename} · ${dateISO}`)
+    await this.app.vault.modify(file, result.content)
+    const line = result.content.slice(0, result.entryOffset).split('\n').length - 1
+
+    const fragment = createFragment((el) => {
+      el.appendText('Added to ')
+      const link = el.createEl('a', { text: file.basename, cls: 'add-to-log-notice-link' })
+      link.addEventListener('click', (e) => {
+        e.preventDefault()
+        void this.app.workspace.getLeaf(false).openFile(file, { eState: { line } })
+      })
+      el.appendText(` · ${dateISO}`)
+    })
+    new Notice(fragment)
   }
 }
