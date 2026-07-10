@@ -91,62 +91,68 @@ describe('insertNoteIntoLog', () => {
 
   it('inserts a new date entry into an empty log', () => {
     const content = ':::log\n:::'
-    const result = insertNoteIntoLog(content, '2026-06-23', 'First entry', settings)
-    expect(result).toContain('- 2026-06-23')
-    expect(result).toContain('First entry')
+    const result = insertNoteIntoLog(content, '2026-06-23', 'First entry', settings)!
+    expect(result.content).toContain('- 2026-06-23')
+    expect(result.content).toContain('First entry')
   })
 
   it('appends to an existing date entry', () => {
     const content = ':::log\n- 2026-06-23\n    - First\n:::'
     const result = insertNoteIntoLog(content, '2026-06-23', 'Second', settings)!
-    expect(result).toContain('First')
-    expect(result).toContain('Second')
+    expect(result.content).toContain('First')
+    expect(result.content).toContain('Second')
     // Second should appear after First
-    expect(result.indexOf('Second')).toBeGreaterThan(result.indexOf('First'))
+    expect(result.content.indexOf('Second')).toBeGreaterThan(result.content.indexOf('First'))
   })
 
   it('inserts newer date before existing older date', () => {
     const content = ':::log\n- 2026-06-22\n    - Old entry\n:::'
     const result = insertNoteIntoLog(content, '2026-06-23', 'New entry', settings)!
-    expect(result.indexOf('2026-06-23')).toBeLessThan(result.indexOf('2026-06-22'))
+    expect(result.content.indexOf('2026-06-23')).toBeLessThan(result.content.indexOf('2026-06-22'))
   })
 
   it('inserts older date after existing newer date', () => {
     const content = ':::log\n- 2026-06-23\n    - New entry\n:::'
     const result = insertNoteIntoLog(content, '2026-06-21', 'Old entry', settings)!
-    expect(result.indexOf('2026-06-23')).toBeLessThan(result.indexOf('2026-06-21'))
+    expect(result.content.indexOf('2026-06-23')).toBeLessThan(result.content.indexOf('2026-06-21'))
   })
 
   it('skips a title heading at the top of the body', () => {
     const content = ':::log\n## Log\n:::'
     const result = insertNoteIntoLog(content, '2026-06-23', 'Entry', settings)!
-    expect(result).toContain('## Log')
-    expect(result).toContain('2026-06-23')
+    expect(result.content).toContain('## Log')
+    expect(result.content).toContain('2026-06-23')
     // Title heading must come before the date line
-    expect(result.indexOf('## Log')).toBeLessThan(result.indexOf('2026-06-23'))
+    expect(result.content.indexOf('## Log')).toBeLessThan(result.content.indexOf('2026-06-23'))
   })
 
   it('uses heading prefix when logDateHeadingLevel > 0', () => {
     const s = makeSettings({ logDateHeadingLevel: 6, logDateStyle: 'plain' })
     const content = ':::log\n:::'
     const result = insertNoteIntoLog(content, '2026-06-23', 'Entry', s)!
-    expect(result).toContain('###### 2026-06-23')
+    expect(result.content).toContain('###### 2026-06-23')
   })
 
   it('uses wikilink format when logDateStyle=wikilink', () => {
     const s = makeSettings({ logDateStyle: 'wikilink', logDateFormat: 'Daily/{{date}}', logDateHeadingLevel: 0 })
     const content = ':::log\n:::'
     const result = insertNoteIntoLog(content, '2026-06-23', 'Entry', s)!
-    expect(result).toContain('[[Daily/2026-06-23]]')
+    expect(result.content).toContain('[[Daily/2026-06-23]]')
   })
 
   it('handles multiple existing entries and inserts in correct order', () => {
     const content = ':::log\n- 2026-06-23\n    - A\n- 2026-06-20\n    - B\n:::'
     const result = insertNoteIntoLog(content, '2026-06-21', 'Middle', settings)!
-    const pos23 = result.indexOf('2026-06-23')
-    const pos21 = result.indexOf('2026-06-21')
-    const pos20 = result.indexOf('2026-06-20')
+    const pos23 = result.content.indexOf('2026-06-23')
+    const pos21 = result.content.indexOf('2026-06-21')
+    const pos20 = result.content.indexOf('2026-06-20')
     expect(pos23).toBeLessThan(pos21)
     expect(pos21).toBeLessThan(pos20)
+  })
+
+  it('reports the entry offset at the inserted note line', () => {
+    const content = ':::log\n:::'
+    const result = insertNoteIntoLog(content, '2026-06-23', 'First entry', settings)!
+    expect(result.content.slice(result.entryOffset, result.entryOffset + 'First entry'.length)).toBe('First entry')
   })
 })

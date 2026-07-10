@@ -90,7 +90,7 @@ export const DEFAULT_SETTINGS: DirectivesSettings = {
   logDateStyle:         'plain',
   logDateFormat:        '{{date}}',
   logDateHeadingLevel:  6,
-  logTitleHeadingLevel: 2,
+  logTitleHeadingLevel: 0,
   logViewButton:        false,
   defaultBpm:         120,
   defaultCpb:         2,
