@@ -103,7 +103,7 @@ class TabWidget extends DirectiveWidget {
     const standalone = !audioSrc
 
     // ── Outer wrapper ──────────────────────────────────────────────────────
-    const wrap = activeDocument.createDiv()
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--tab'
 
     // Required: click-to-edit convention (moves cursor into block so the
@@ -250,34 +250,34 @@ class TabWidget extends DirectiveWidget {
     playBtn: HTMLButtonElement
     bpmInput: HTMLInputElement
   } {
-    const headerEl = activeDocument.createDiv()
+    const headerEl = activeDocument.createElement('div')
     headerEl.className = 'directive-tab-header'
     // Stop header interactions from bubbling to the wrap's cursor-move handler.
     headerEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
 
     // Play / pause button
-    const playBtn = activeDocument.createEl('button')
+    const playBtn = activeDocument.createElement('button')
     playBtn.className   = 'directive-transport__play-btn'
     playBtn.textContent = '▶'
     playBtn.setAttribute('aria-label', audioSrc ? 'Synced to audio' : 'Play/pause tab')
 
     // Song title label
-    const labelEl = activeDocument.createSpan()
+    const labelEl = activeDocument.createElement('span')
     labelEl.className   = 'directive-tab-label'
     labelEl.textContent = this.directive.label ?? ''
 
     // BPM control
-    const bpmControl = activeDocument.createDiv()
+    const bpmControl = activeDocument.createElement('div')
     bpmControl.className = 'directive-bpm-control'
 
-    const bpmInput = activeDocument.createEl('input')
+    const bpmInput = activeDocument.createElement('input')
     bpmInput.type  = 'number'
     bpmInput.min   = '20'
     bpmInput.max   = '300'
     bpmInput.value = String(this.bpm)
     bpmInput.setAttribute('aria-label', 'BPM')
 
-    const bpmLabel = activeDocument.createSpan()
+    const bpmLabel = activeDocument.createElement('span')
     bpmLabel.textContent = 'BPM'
 
     bpmControl.appendChild(bpmInput)
@@ -294,18 +294,18 @@ class TabWidget extends DirectiveWidget {
     displayEl: HTMLElement
     playheadEl: HTMLElement
   } {
-    const displayEl = activeDocument.createDiv()
+    const displayEl = activeDocument.createElement('div')
     displayEl.className = 'directive-tab-display'
     // Stop scroll/click interactions from bubbling to the cursor-move handler.
     displayEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
 
     // Vertical playhead line — absolutely positioned inside displayEl
-    const playheadEl = activeDocument.createDiv()
+    const playheadEl = activeDocument.createElement('div')
     playheadEl.className = 'directive-tab-playhead'
     displayEl.appendChild(playheadEl)
 
     // Tab content
-    const pre = activeDocument.createEl('pre')
+    const pre = activeDocument.createElement('pre')
     pre.className   = 'directive-tab-pre'
     pre.textContent = body
     displayEl.appendChild(pre)

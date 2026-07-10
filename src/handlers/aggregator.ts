@@ -505,7 +505,7 @@ class AggregatorWidget extends DirectiveWidget {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createDiv()
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-checklist__outer'
     wrap.addEventListener('mousedown', (e: MouseEvent) => {
       e.preventDefault()
@@ -524,7 +524,7 @@ class AggregatorWidget extends DirectiveWidget {
     this.actionsEl = header.querySelector('.directive-checklist__actions')
     wrap.appendChild(header)
 
-    const bodyEl = activeDocument.createDiv()
+    const bodyEl = activeDocument.createElement('div')
     bodyEl.className = 'directive-widget directive-widget--aggregator'
     bodyEl.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     wrap.appendChild(bodyEl)
@@ -562,7 +562,7 @@ class AggregatorWidget extends DirectiveWidget {
   }
 
   toBodyDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createDiv()
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--aggregator directive-widget--body-only'
     wrap.addEventListener('mousedown', (e: MouseEvent) => {
       e.preventDefault()
@@ -668,13 +668,13 @@ class AggregatorWidget extends DirectiveWidget {
     // Tab bar lives in the body.
     this.clearBodyContent(bodyEl)
 
-    const tabBar = activeDocument.createDiv()
+    const tabBar = activeDocument.createElement('div')
     tabBar.className = 'directive-aggregator__tab-bar'
     tabBar.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
     const tabBtns: HTMLButtonElement[] = []
     tabs.forEach((tab, idx) => {
-      const btn = activeDocument.createEl('button')
+      const btn = activeDocument.createElement('button')
       btn.className = 'directive-aggregator__tab-btn'
       btn.classList.toggle('is-active', idx === this.activeTab)
       btn.textContent = tab.label
@@ -795,23 +795,23 @@ class AggregatorWidget extends DirectiveWidget {
         groups.get(line.sourcePath)!.push(line)
       }
       for (const [srcPath, lines] of groups) {
-        const section = activeDocument.createDiv()
+        const section = activeDocument.createElement('div')
         section.className = 'directive-checklist__group'
         if (srcPath) {
-          const gh = activeDocument.createDiv()
+          const gh = activeDocument.createElement('div')
           gh.className = 'directive-checklist__group-header'
           const parts = srcPath.split('/')
           gh.textContent = (parts[parts.length - 1] ?? srcPath).replace(/\.md$/, '')
           section.appendChild(gh)
         }
-        const list = activeDocument.createDiv()
+        const list = activeDocument.createElement('div')
         list.className = 'directive-checklist__list'
         for (const line of lines) list.appendChild(this.buildRow(line, view))
         section.appendChild(list)
         bodyEl.appendChild(section)
       }
     } else {
-      const list = activeDocument.createDiv()
+      const list = activeDocument.createElement('div')
       list.className = 'directive-checklist__list'
       for (const line of visibleLines) list.appendChild(this.buildRow(line, view))
       bodyEl.appendChild(list)
@@ -821,11 +821,11 @@ class AggregatorWidget extends DirectiveWidget {
       const start = this.currentPage * pageSize + 1
       const end   = Math.min((this.currentPage + 1) * pageSize, allLines.length)
 
-      const footer = activeDocument.createDiv()
+      const footer = activeDocument.createElement('div')
       footer.className = 'directive-aggregator__pagination'
       footer.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
-      const prevBtn = activeDocument.createEl('button')
+      const prevBtn = activeDocument.createElement('button')
       prevBtn.className = 'clickable-icon directive-checklist__action-btn directive-aggregator__page-btn'
       prevBtn.setAttribute('aria-label', 'Previous page')
       setIcon(prevBtn, 'chevron-left')
@@ -837,11 +837,11 @@ class AggregatorWidget extends DirectiveWidget {
         this.renderPage(bodyEl, view, grouped, sourceEntries, paginate, pageSize, pageKey)
       })
 
-      const counter = activeDocument.createSpan()
+      const counter = activeDocument.createElement('span')
       counter.className = 'directive-aggregator__page-counter'
       counter.textContent = `${start}–${end} of ${allLines.length}`
 
-      const nextBtn = activeDocument.createEl('button')
+      const nextBtn = activeDocument.createElement('button')
       nextBtn.className = 'clickable-icon directive-checklist__action-btn directive-aggregator__page-btn'
       nextBtn.setAttribute('aria-label', 'Next page')
       setIcon(nextBtn, 'chevron-right')
@@ -858,10 +858,10 @@ class AggregatorWidget extends DirectiveWidget {
       footer.appendChild(nextBtn)
       bodyEl.appendChild(footer)
     } else if (paginate) {
-      const footer = activeDocument.createDiv()
+      const footer = activeDocument.createElement('div')
       footer.className = 'directive-aggregator__pagination'
       footer.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
-      const counter = activeDocument.createSpan()
+      const counter = activeDocument.createElement('span')
       counter.className = 'directive-aggregator__page-counter'
       counter.textContent = `${allLines.length} result${allLines.length === 1 ? '' : 's'}`
       footer.appendChild(counter)
@@ -877,19 +877,19 @@ class AggregatorWidget extends DirectiveWidget {
   // ── Shared helpers ──────────────────────────────────────────────────────────
 
   private buildHeader(titleText: string, view: EditorView, onRefresh: () => void): HTMLElement {
-    const header = activeDocument.createDiv()
+    const header = activeDocument.createElement('div')
     header.className = 'directive-checklist__header'
     header.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
-    const title = activeDocument.createSpan()
+    const title = activeDocument.createElement('span')
     title.className = 'directive-checklist__title'
     title.textContent = titleText
     header.appendChild(title)
 
-    const actions = activeDocument.createSpan()
+    const actions = activeDocument.createElement('span')
     actions.className = 'directive-checklist__actions'
 
-    const refreshBtn = activeDocument.createEl('button')
+    const refreshBtn = activeDocument.createElement('button')
     refreshBtn.className = 'clickable-icon directive-checklist__action-btn'
     refreshBtn.setAttribute('aria-label', 'Refresh')
     setIcon(refreshBtn, 'refresh-cw')
@@ -898,7 +898,7 @@ class AggregatorWidget extends DirectiveWidget {
     refreshBtn.dataset['permanent'] = '1'
     actions.appendChild(refreshBtn)
 
-    const moreBtn = activeDocument.createEl('button')
+    const moreBtn = activeDocument.createElement('button')
     moreBtn.className = 'clickable-icon directive-checklist__action-btn'
     moreBtn.setAttribute('aria-label', 'More options')
     setIcon(moreBtn, 'more-horizontal')
@@ -1019,7 +1019,7 @@ class AggregatorWidget extends DirectiveWidget {
     moreBtn.dataset['permanent'] = '1'
     actions.appendChild(moreBtn)
 
-    const editBtn = activeDocument.createEl('button')
+    const editBtn = activeDocument.createElement('button')
     editBtn.className = 'clickable-icon directive-checklist__action-btn'
     editBtn.setAttribute('aria-label', 'Edit this block')
     setIcon(editBtn, 'code-2')
@@ -1048,11 +1048,11 @@ class AggregatorWidget extends DirectiveWidget {
     const filterCycle: FilterMode[] = ['all', 'hide-done', 'only-done']
     const filterLabels: Record<FilterMode, string> = { all: 'All', 'hide-done': 'Hide done', 'only-done': 'Only done' }
     const filterIcons:  Record<FilterMode, string> = { all: 'list', 'hide-done': 'circle', 'only-done': 'check-circle' }
-    const filterBtn = activeDocument.createEl('button')
+    const filterBtn = activeDocument.createElement('button')
     filterBtn.className = 'clickable-icon directive-checklist__action-btn directive-checklist__filter-btn'
     filterBtn.setAttribute('aria-label', `Filter: ${filterLabels[filter]}`)
     setIcon(filterBtn, filterIcons[filter])
-    const filterBadge = activeDocument.createSpan()
+    const filterBadge = activeDocument.createElement('span')
     filterBadge.className = 'directive-checklist__filter-badge'
     filterBadge.textContent = filterLabels[filter]
     filterBtn.appendChild(filterBadge)
@@ -1066,27 +1066,27 @@ class AggregatorWidget extends DirectiveWidget {
   }
 
   private emptyEl(message: string): HTMLElement {
-    const el = activeDocument.createDiv()
+    const el = activeDocument.createElement('div')
     el.className = 'directive-checklist__empty'
     el.textContent = message
     return el
   }
 
   private buildRow(line: AggLine, view: EditorView): HTMLElement {
-    const row = activeDocument.createDiv()
+    const row = activeDocument.createElement('div')
     row.className = 'directive-checklist__row directive-aggregator__row'
     row.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
-    const textEl = activeDocument.createSpan()
+    const textEl = activeDocument.createElement('span')
     textEl.className = 'directive-checklist__text directive-aggregator__text'
     textEl.textContent = line.text
     textEl.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
 
-    const rowActions = activeDocument.createSpan()
+    const rowActions = activeDocument.createElement('span')
     rowActions.className = 'directive-checklist__row-actions'
 
     if (line.sourcePath) {
-      const jumpBtn = activeDocument.createEl('button')
+      const jumpBtn = activeDocument.createElement('button')
       jumpBtn.className = 'clickable-icon directive-checklist__row-btn'
       jumpBtn.setAttribute('aria-label', 'Jump to source')
       setIcon(jumpBtn, 'arrow-right')

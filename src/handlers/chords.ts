@@ -366,7 +366,7 @@ class ChordWidget extends DirectiveWidget {
     const audioSrc = this.directive.attributes['audio']
     const entries  = parseChordEntries(this.directive.body ?? '')
 
-    const wrap = activeDocument.createDiv()
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--chords'
 
     // Required: click anywhere on the widget puts cursor inside the block,
@@ -379,14 +379,14 @@ class ChordWidget extends DirectiveWidget {
 
     // Optional title label
     if (this.directive.label) {
-      const header = activeDocument.createDiv()
+      const header = activeDocument.createElement('div')
       header.className = 'directive-chords-header'
       header.textContent = this.directive.label
       wrap.appendChild(header)
     }
 
     // Chord grid / row / column / text container
-    const container = activeDocument.createDiv()
+    const container = activeDocument.createElement('div')
     container.className = this.layoutClass(layout)
     wrap.appendChild(container)
 
@@ -439,7 +439,7 @@ class ChordWidget extends DirectiveWidget {
     audioSrc: string | undefined,
     layout: Layout,
   ): HTMLElement {
-    const card = activeDocument.createDiv()
+    const card = activeDocument.createElement('div')
     card.className = 'directive-chord-card'
     card.title     = entry.name
 
@@ -466,14 +466,14 @@ class ChordWidget extends DirectiveWidget {
     }
 
     // Chord name
-    const nameEl = activeDocument.createSpan()
+    const nameEl = activeDocument.createElement('span')
     nameEl.className   = 'directive-chord-name'
     nameEl.textContent = entry.name
     card.appendChild(nameEl)
 
     // Timestamp badge
     if (entry.raw) {
-      const ts = activeDocument.createSpan()
+      const ts = activeDocument.createElement('span')
       ts.className   = 'directive-chord-timestamp'
       ts.textContent = entry.raw
       card.appendChild(ts)
@@ -484,7 +484,7 @@ class ChordWidget extends DirectiveWidget {
 
   /** Placeholder shown for chords not found in the built-in database. */
   private buildUnknownPlaceholder(): HTMLElement {
-    const el = activeDocument.createDiv()
+    const el = activeDocument.createElement('div')
     el.className = 'directive-chord-unknown'
     el.textContent = '?'
     return el

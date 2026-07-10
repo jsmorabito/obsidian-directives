@@ -115,7 +115,7 @@ class FoldIndicatorWidget extends WidgetType {
   }
 
   private makeFoldBtn(view: EditorView): HTMLElement {
-    const btn = activeDocument.createSpan()
+    const btn = activeDocument.createElement('span')
     btn.className = 'directive-foldable__toggle'
     if (this.collapsed) btn.classList.add('directive-foldable__toggle--collapsed')
     setIcon(btn, 'right-triangle')
@@ -146,7 +146,7 @@ class FoldIndicatorWidget extends WidgetType {
 
     if (inner?.toHeaderDOM) {
       // Render header inline on the opening line, fold button to the left
-      const wrap = activeDocument.createSpan()
+      const wrap = activeDocument.createElement('span')
       wrap.className = 'directive-fold-header'
       wrap.contentEditable = 'false'
       wrap.appendChild(this.makeFoldBtn(view))
@@ -155,7 +155,7 @@ class FoldIndicatorWidget extends WidgetType {
     }
 
     // Fallback: zero-height span, fold button only
-    const el = activeDocument.createSpan()
+    const el = activeDocument.createElement('span')
     el.className = 'directive-fold-indicator'
     el.contentEditable = 'false'
     el.appendChild(this.makeFoldBtn(view))
@@ -185,7 +185,7 @@ class FoldableBodyWidget extends WidgetType {
     const inner = this.inner as WidgetType & { toBodyDOM?: (v: EditorView) => HTMLElement }
     if (inner.toBodyDOM) {
       if (this.collapsed) {
-        const empty = activeDocument.createDiv()
+        const empty = activeDocument.createElement('div')
         empty.classList.add('directive-foldable__body--hidden')
         return empty
       }
@@ -219,17 +219,17 @@ class FallbackWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createDiv()
+    const wrap = activeDocument.createElement('div')
     wrap.className = 'directive-widget directive-widget--fallback'
     wrap.setAttribute('data-directive', this.directive.name)
 
-    const badge = activeDocument.createSpan()
+    const badge = activeDocument.createElement('span')
     badge.className = 'directive-widget__name'
     badge.textContent = `:${this.directive.name}`
     wrap.appendChild(badge)
 
     if (this.directive.body) {
-      const body = activeDocument.createDiv()
+      const body = activeDocument.createElement('div')
       body.className = 'directive-widget__body'
       body.textContent = this.directive.body
       wrap.appendChild(body)
