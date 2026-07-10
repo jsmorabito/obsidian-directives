@@ -117,12 +117,12 @@ export function debounce<T extends (...args: Parameters<T>) => void>(
   fn: T,
   ms: number,
 ): (...args: Parameters<T>) => void {
+  // Use window.* for popout-window compatibility in Obsidian; bare globals in Node tests.
+  const scheduleTimeout: typeof setTimeout = typeof window !== 'undefined' ? window.setTimeout.bind(window) : setTimeout
+  const cancelTimeout: typeof clearTimeout = typeof window !== 'undefined' ? window.clearTimeout.bind(window) : clearTimeout
   let timer: ReturnType<typeof setTimeout>
   return (...args: Parameters<T>): void => {
-    // Use window.* when available (Obsidian/browser); fall back to globalThis in Node tests.
-    // eslint-disable-next-line obsidianmd/no-global-this
-    const w = typeof window !== 'undefined' ? window : globalThis
-    w.clearTimeout(timer)
-    timer = w.setTimeout(() => fn(...args), ms)
+    cancelTimeout(timer)
+    timer = scheduleTimeout(() => fn(...args), ms)
   }
 }

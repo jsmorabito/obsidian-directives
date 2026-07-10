@@ -28,8 +28,7 @@ export class DirectivesSettingTab extends PluginSettingTab {
       .setName(label)
       .setDesc(desc)
       .addText(text => {
-        // eslint-disable-next-line obsidianmd/ui/sentence-case -- font name is a proper noun, not prose
-        text.setPlaceholder('e.g. New York').setValue(get())
+        text.setPlaceholder('E.g. Georgia').setValue(get())
         currentText = get()
         text.inputEl.addEventListener('input', () => { currentText = text.inputEl.value })
         text.inputEl.addEventListener('blur', () => { void set(currentText) })
@@ -177,8 +176,7 @@ export class DirectivesSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Tab directive").setHeading()
 
     new Setting(containerEl)
-      // eslint-disable-next-line obsidianmd/ui/sentence-case
-      .setName('Default BPM')
+      .setName('Default tempo')
       .setDesc(
         'Beats per minute used when a :::tab block does not include a bpm= attribute. ' +
         'Range: 20 – 300.',

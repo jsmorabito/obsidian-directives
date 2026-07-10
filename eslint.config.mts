@@ -1,9 +1,8 @@
-import tseslint from 'typescript-eslint';
 import obsidianmd from 'eslint-plugin-obsidianmd';
 import globals from 'globals';
-import { globalIgnores } from 'eslint/config';
+import { defineConfig, globalIgnores } from 'eslint/config';
 
-export default tseslint.config(
+export default defineConfig(
 	globalIgnores([
 		'node_modules',
 		'dist',
@@ -37,6 +36,14 @@ export default tseslint.config(
 			'obsidianmd/prefer-active-doc':    'off',
 			'obsidianmd/prefer-window-timers': 'off',
 			'obsidianmd/no-forbidden-elements': 'off',
+			'obsidianmd/prefer-create-el':      'off',
+		},
+	},
+	// URLs aren't prose — sentence-case's heuristics otherwise want the
+	// scheme capitalized (e.g. "HTTPS://...").
+	{
+		rules: {
+			'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, ignoreRegex: ['^\\w+:\\/\\/'] }],
 		},
 	},
 );

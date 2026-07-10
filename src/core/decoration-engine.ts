@@ -54,6 +54,8 @@ function foldPersistKey(d: ParsedDirective): string {
   return `${d.name}:${d.label ?? ''}:${d.from}`
 }
 
+// App#loadLocalStorage/saveLocalStorage require Obsidian 1.8.7+; this plugin's
+// minAppVersion is 1.4.10, so fold state is persisted via raw localStorage instead.
 function loadFoldState(d: ParsedDirective): boolean {
   try {
     const raw = localStorage.getItem(FOLD_STORAGE_KEY)
@@ -66,7 +68,7 @@ function loadFoldState(d: ParsedDirective): boolean {
 function saveFoldState(d: ParsedDirective, collapsed: boolean): void {
   try {
     const raw = localStorage.getItem(FOLD_STORAGE_KEY)
-    const store: Record<string, boolean> = raw ? JSON.parse(raw) : {}
+    const store: Record<string, boolean> = raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
     if (collapsed) {
       store[foldPersistKey(d)] = true
     } else {
@@ -113,7 +115,7 @@ class FoldIndicatorWidget extends WidgetType {
   }
 
   private makeFoldBtn(view: EditorView): HTMLElement {
-    const btn = activeDocument.createElement('span')
+    const btn = activeDocument.createSpan()
     btn.className = 'directive-foldable__toggle'
     if (this.collapsed) btn.classList.add('directive-foldable__toggle--collapsed')
     setIcon(btn, 'right-triangle')
@@ -127,7 +129,7 @@ class FoldIndicatorWidget extends WidgetType {
       const coordsBefore = view.coordsAtPos(this.directive.from)
       view.dispatch({ effects: foldEffect.of({ from: this.directive.from, collapsed: nowCollapsed }) })
       if (coordsBefore) {
-        requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
           const coordsAfter = view.coordsAtPos(this.directive.from)
           if (coordsAfter) {
             const delta = coordsAfter.top - coordsBefore.top
@@ -140,11 +142,11 @@ class FoldIndicatorWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const inner = this.inner as (WidgetType & { toHeaderDOM?: (v: EditorView) => HTMLElement }) | null
+    const inner = this.inner ? (this.inner as WidgetType & { toHeaderDOM?: (v: EditorView) => HTMLElement }) : null
 
     if (inner?.toHeaderDOM) {
       // Render header inline on the opening line, fold button to the left
-      const wrap = activeDocument.createElement('span')
+      const wrap = activeDocument.createSpan()
       wrap.className = 'directive-fold-header'
       wrap.contentEditable = 'false'
       wrap.appendChild(this.makeFoldBtn(view))
@@ -153,7 +155,7 @@ class FoldIndicatorWidget extends WidgetType {
     }
 
     // Fallback: zero-height span, fold button only
-    const el = activeDocument.createElement('span')
+    const el = activeDocument.createSpan()
     el.className = 'directive-fold-indicator'
     el.contentEditable = 'false'
     el.appendChild(this.makeFoldBtn(view))
@@ -183,8 +185,8 @@ class FoldableBodyWidget extends WidgetType {
     const inner = this.inner as WidgetType & { toBodyDOM?: (v: EditorView) => HTMLElement }
     if (inner.toBodyDOM) {
       if (this.collapsed) {
-        const empty = activeDocument.createElement('div')
-        empty.style.display = 'none'
+        const empty = activeDocument.createDiv()
+        empty.classList.add('directive-foldable__body--hidden')
         return empty
       }
       return inner.toBodyDOM(view)
@@ -217,17 +219,17 @@ class FallbackWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createElement('div')
+    const wrap = activeDocument.createDiv()
     wrap.className = 'directive-widget directive-widget--fallback'
     wrap.setAttribute('data-directive', this.directive.name)
 
-    const badge = activeDocument.createElement('span')
+    const badge = activeDocument.createSpan()
     badge.className = 'directive-widget__name'
     badge.textContent = `:${this.directive.name}`
     wrap.appendChild(badge)
 
     if (this.directive.body) {
-      const body = activeDocument.createElement('div')
+      const body = activeDocument.createDiv()
       body.className = 'directive-widget__body'
       body.textContent = this.directive.body
       wrap.appendChild(body)

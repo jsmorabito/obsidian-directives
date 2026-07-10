@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* Minimal CM6 view stub */
 export class EditorView {}
 export class WidgetType {
@@ -6,6 +5,7 @@ export class WidgetType {
   destroy(_dom: HTMLElement): void {}
   ignoreEvent(): boolean { return true }
 }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- V is a phantom generic kept for API-shape parity with the real ViewPlugin<V>
 export class ViewPlugin<V> {
   static define<V>(_create: (_view: EditorView) => V, _spec?: unknown): ViewPlugin<V> {
     return new ViewPlugin<V>()

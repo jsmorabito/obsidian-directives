@@ -94,6 +94,10 @@
   display: none;
 }
 
+.directive-foldable__body--hidden {
+  display: none;
+}
+
 /* Body-only card (split foldable): no top margin since header is above it on its own line */
 .directive-widget--body-only {
   margin-block-start: 0;
@@ -945,6 +949,7 @@
   box-shadow: var(--shadow-l);
   padding: 10px 14px 14px;
   overflow-y: auto;
+  width: 400px;
   max-height: 480px;
   z-index: var(--layer-popover);
 }

@@ -151,7 +151,7 @@ class AudioWidget extends DirectiveWidget {
   toDOM(view: EditorView): HTMLElement {
     const src  = this.directive.attributes['src'] ?? ''
 
-    const wrap = activeDocument.createElement('div')
+    const wrap = activeDocument.createDiv()
     wrap.className = 'directive-widget directive-widget--audio'
 
     // Required convention: clicking the widget moves cursor into the block
@@ -196,14 +196,14 @@ class AudioWidget extends DirectiveWidget {
   // -------------------------------------------------------------------------
 
   private buildErrorState(src: string): HTMLElement {
-    const row = activeDocument.createElement('div')
+    const row = activeDocument.createDiv()
     row.className = 'directive-widget--error'
 
-    const icon = activeDocument.createElement('span')
+    const icon = activeDocument.createSpan()
     icon.className = 'directive-error-icon'
     icon.textContent = '⚠'
 
-    const msg = activeDocument.createElement('span')
+    const msg = activeDocument.createSpan()
     msg.className = 'directive-error-msg'
     msg.textContent = src.trim()
       ? `Audio file not found: ${src}`
@@ -224,13 +224,13 @@ class AudioWidget extends DirectiveWidget {
     timestamps: TimestampEntry[],
     wrap: HTMLElement,
   ): HTMLElement {
-    const transport = activeDocument.createElement('div')
+    const transport = activeDocument.createDiv()
     transport.className = 'directive-transport'
     // Stop transport clicks from bubbling to the wrap's cursor-move handler.
     transport.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
 
     // -- Play/pause button --
-    const playBtn = activeDocument.createElement('button')
+    const playBtn = activeDocument.createEl('button')
     playBtn.className = 'directive-transport__play-btn'
     playBtn.setAttribute('aria-label', 'Play/pause')
     playBtn.textContent = audio.paused ? '▶' : '⏸'
@@ -245,7 +245,7 @@ class AudioWidget extends DirectiveWidget {
     })
 
     // -- Scrubber --
-    const scrubber = activeDocument.createElement('input')
+    const scrubber = activeDocument.createEl('input')
     scrubber.type      = 'range'
     scrubber.className = 'directive-transport__scrubber'
     scrubber.min       = '0'
@@ -255,7 +255,7 @@ class AudioWidget extends DirectiveWidget {
     scrubber.setAttribute('aria-label', 'Seek')
 
     // -- Time display --
-    const timeDisplay = activeDocument.createElement('span')
+    const timeDisplay = activeDocument.createSpan()
     timeDisplay.className   = 'directive-transport__time'
     timeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`
 
@@ -322,7 +322,7 @@ class AudioWidget extends DirectiveWidget {
     src: string,
     timestamps: TimestampEntry[],
   ): HTMLElement {
-    const list = activeDocument.createElement('div')
+    const list = activeDocument.createDiv()
     list.className = 'directive-audio-timestamps'
 
     if (timestamps.length === 0) return list
@@ -334,15 +334,15 @@ class AudioWidget extends DirectiveWidget {
       const entry = timestamps[i]
       if (!entry) continue
 
-      const row = activeDocument.createElement('div')
+      const row = activeDocument.createDiv()
       row.className = 'directive-timestamp-row'
       if (i === activeIndex) row.classList.add('directive-row--active')
 
-      const ts = activeDocument.createElement('span')
+      const ts = activeDocument.createSpan()
       ts.className   = 'directive-timestamp'
       ts.textContent = entry.raw
 
-      const lbl = activeDocument.createElement('span')
+      const lbl = activeDocument.createSpan()
       lbl.className   = 'directive-timestamp-label'
       lbl.textContent = entry.label
 

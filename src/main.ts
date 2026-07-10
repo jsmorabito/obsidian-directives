@@ -60,9 +60,16 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   private logViewButtons = new WeakMap<MarkdownView, HTMLElement>()
   private openLogPopover: ViewLogPopover | null = null
-  private fontStyleEl: HTMLStyleElement | null = null
   /** Paths of vault files known to contain at least one :::log block. */
   private logFileCache = new Set<string>()
+
+  private static readonly FONT_CSS_VARS = [
+    '--directive-font-log',
+    '--directive-font-audio',
+    '--directive-font-chords',
+    '--directive-font-tab',
+    '--directive-font-youtube',
+  ] as const
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -153,28 +160,31 @@ export default class ObsidianDirectivesPlugin extends Plugin
 
   onunload(): void {
     this.closeLogPopover()
-    this.fontStyleEl?.remove()
+    for (const cssVar of ObsidianDirectivesPlugin.FONT_CSS_VARS) {
+      activeDocument.body.style.removeProperty(cssVar)
+    }
     disposeAllAudio()
     this.registry = undefined as unknown as DirectiveRegistry
   }
 
   applyFontSettings(): void {
-    if (!this.fontStyleEl) {
-      // Inject a single :root block for dynamic font CSS variables — cannot be a static stylesheet.
-      this.fontStyleEl = activeDocument.createElement('style')
-      this.fontStyleEl.id = 'obsidian-directives-fonts'
-      activeDocument.head.appendChild(this.fontStyleEl)
-    }
     const s = this.settings
-    const rule = (prop: string, val: string) =>
-      val.trim() ? `  ${prop}: ${val.trim()};` : ''
-    this.fontStyleEl.textContent = `:root {\n` +
-      rule('--directive-font-log',     s.fontLog)     + '\n' +
-      rule('--directive-font-audio',   s.fontAudio)   + '\n' +
-      rule('--directive-font-chords',  s.fontChords)  + '\n' +
-      rule('--directive-font-tab',     s.fontTab)     + '\n' +
-      rule('--directive-font-youtube', s.fontYoutube) + '\n' +
-      `}`
+    const values: Record<string, string> = {
+      '--directive-font-log':     s.fontLog,
+      '--directive-font-audio':   s.fontAudio,
+      '--directive-font-chords':  s.fontChords,
+      '--directive-font-tab':     s.fontTab,
+      '--directive-font-youtube': s.fontYoutube,
+    }
+    const toSet: Record<string, string> = {}
+    for (const [cssVar, val] of Object.entries(values)) {
+      if (val.trim()) {
+        toSet[cssVar] = val.trim()
+      } else {
+        activeDocument.body.style.removeProperty(cssVar)
+      }
+    }
+    activeDocument.body.setCssProps(toSet)
   }
 
   // ── Log view-header button ────────────────────────────────────────────────

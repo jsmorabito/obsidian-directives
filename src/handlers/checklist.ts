@@ -448,7 +448,7 @@ class ChecklistWidget extends DirectiveWidget {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const outer = activeDocument.createElement('div')
+    const outer = activeDocument.createDiv()
     outer.className = 'directive-checklist__outer'
 
     outer.addEventListener('mousedown', (e: MouseEvent) => {
@@ -472,7 +472,7 @@ class ChecklistWidget extends DirectiveWidget {
   }
 
   toBodyDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createElement('div')
+    const wrap = activeDocument.createDiv()
     wrap.className = 'directive-widget directive-widget--checklist directive-widget--body-only'
 
     wrap.addEventListener('mousedown', (e: MouseEvent) => {
@@ -506,26 +506,26 @@ class ChecklistWidget extends DirectiveWidget {
     const filterAttr = (this.directive.attributes['filter'] ?? 'all') as FilterMode
     const grouped    = this.directive.attributes['group'] === 'true'
 
-    const header = activeDocument.createElement('div')
+    const header = activeDocument.createDiv()
     header.className = 'directive-checklist__header'
 
-    const title = activeDocument.createElement('span')
+    const title = activeDocument.createSpan()
     title.className = 'directive-checklist__title'
     title.textContent = label ?? 'Checklist'
     header.appendChild(title)
 
-    const actions = activeDocument.createElement('span')
+    const actions = activeDocument.createSpan()
     actions.className = 'directive-checklist__actions'
 
     const filterLabels: Record<FilterMode, string> = { all: 'All', todo: 'To do', done: 'Done' }
     const filterIcons:  Record<FilterMode, string> = { all: 'list', todo: 'circle', done: 'check-circle' }
     const currentFilter = (['todo', 'done', 'all'] as const).includes(filterAttr) ? filterAttr : 'all'
-    const filterBtn = activeDocument.createElement('button')
+    const filterBtn = activeDocument.createEl('button')
     filterBtn.className = 'clickable-icon directive-checklist__action-btn directive-checklist__filter-btn'
     filterBtn.setAttribute('aria-label', `Filter: ${filterLabels[currentFilter]}`)
     filterBtn.dataset['filter'] = currentFilter
     setIcon(filterBtn, 'list-filter')
-    const filterBadge = activeDocument.createElement('span')
+    const filterBadge = activeDocument.createSpan()
     filterBadge.className = 'directive-checklist__filter-badge'
     filterBadge.textContent = filterLabels[currentFilter]
     filterBtn.appendChild(filterBadge)
@@ -545,7 +545,7 @@ class ChecklistWidget extends DirectiveWidget {
     })
     actions.appendChild(filterBtn)
 
-    const addBtn = activeDocument.createElement('button')
+    const addBtn = activeDocument.createEl('button')
     addBtn.className = 'clickable-icon directive-checklist__action-btn'
     addBtn.setAttribute('aria-label', 'Add task')
     setIcon(addBtn, 'plus')
@@ -553,7 +553,7 @@ class ChecklistWidget extends DirectiveWidget {
     addBtn.addEventListener('click', () => this.insertInlineTask(view))
     actions.appendChild(addBtn)
 
-    const moreBtn = activeDocument.createElement('button')
+    const moreBtn = activeDocument.createEl('button')
     moreBtn.className = 'clickable-icon directive-checklist__action-btn'
     moreBtn.setAttribute('aria-label', 'More options')
     setIcon(moreBtn, 'more-horizontal')
@@ -684,7 +684,7 @@ class ChecklistWidget extends DirectiveWidget {
     })
     actions.appendChild(moreBtn)
 
-    const editBtn = activeDocument.createElement('button')
+    const editBtn = activeDocument.createEl('button')
     editBtn.className = 'clickable-icon directive-checklist__action-btn'
     editBtn.setAttribute('aria-label', 'Edit this block')
     setIcon(editBtn, 'code-2')
@@ -770,14 +770,14 @@ class ChecklistWidget extends DirectiveWidget {
     const filtered = applyFilter(allTasks, filter)
 
     if (filtered.length === 0) {
-      const empty = activeDocument.createElement('div')
+      const empty = activeDocument.createDiv()
       empty.className = 'directive-checklist__empty'
       if (filter !== 'all') {
         const msg = filter === 'todo' ? 'No open tasks' : 'No completed tasks'
         empty.textContent = msg
       } else {
         empty.textContent = 'Press'
-        const kbd = activeDocument.createElement('span')
+        const kbd = activeDocument.createSpan()
         kbd.className = 'directive-checklist__empty-hint'
         kbd.textContent = '+'
         const rest = activeDocument.createTextNode(' to add your first task')
@@ -805,18 +805,18 @@ class ChecklistWidget extends DirectiveWidget {
       }
 
       for (const [srcPath, tasks] of groups) {
-        const section = activeDocument.createElement('div')
+        const section = activeDocument.createDiv()
         section.className = 'directive-checklist__group'
 
         if (srcPath) {
-          const groupHeader = activeDocument.createElement('div')
+          const groupHeader = activeDocument.createDiv()
           groupHeader.className = 'directive-checklist__group-header'
           const parts = srcPath.split('/')
           groupHeader.textContent = (parts[parts.length - 1] ?? srcPath).replace(/\.md$/, '')
           section.appendChild(groupHeader)
         }
 
-        const list = activeDocument.createElement('div')
+        const list = activeDocument.createDiv()
         list.className = 'directive-checklist__list'
         for (const task of tasks) {
           list.appendChild(this.buildRow(task, bodyEl, view, true))
@@ -825,7 +825,7 @@ class ChecklistWidget extends DirectiveWidget {
         bodyEl.appendChild(section)
       }
     } else {
-      const list = activeDocument.createElement('div')
+      const list = activeDocument.createDiv()
       list.className = 'directive-checklist__list'
       for (const task of paginated) {
         list.appendChild(this.buildRow(task, bodyEl, view, false))
@@ -835,10 +835,10 @@ class ChecklistWidget extends DirectiveWidget {
 
     // Pagination footer
     if (totalPages > 1) {
-      const footer = activeDocument.createElement('div')
+      const footer = activeDocument.createDiv()
       footer.className = 'directive-checklist__pagination'
 
-      const prevBtn = activeDocument.createElement('button')
+      const prevBtn = activeDocument.createEl('button')
       prevBtn.className = 'clickable-icon directive-checklist__page-btn'
       prevBtn.disabled = this.page === 0
       setIcon(prevBtn, 'chevron-left')
@@ -848,11 +848,11 @@ class ChecklistWidget extends DirectiveWidget {
         void this.buildBodyContent(bodyEl, view)
       })
 
-      const pageLabel = activeDocument.createElement('span')
+      const pageLabel = activeDocument.createSpan()
       pageLabel.className = 'directive-checklist__page-label'
       pageLabel.textContent = `${this.page + 1} / ${totalPages}`
 
-      const nextBtn = activeDocument.createElement('button')
+      const nextBtn = activeDocument.createEl('button')
       nextBtn.className = 'clickable-icon directive-checklist__page-btn'
       nextBtn.disabled = this.page >= totalPages - 1
       setIcon(nextBtn, 'chevron-right')
@@ -885,17 +885,17 @@ class ChecklistWidget extends DirectiveWidget {
   private async buildContent(outer: HTMLElement, view: EditorView): Promise<void> {
     outer.empty()
     outer.appendChild(this.buildHeaderEl(view))
-    const card = activeDocument.createElement('div')
+    const card = activeDocument.createDiv()
     card.className = 'directive-widget directive-widget--checklist'
     card.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
     outer.appendChild(card)
-    const bodyEl = activeDocument.createElement('div')
+    const bodyEl = activeDocument.createDiv()
     card.appendChild(bodyEl)
     await this.buildBodyContent(bodyEl, view)
   }
 
   private buildRow(task: Task, wrap: HTMLElement, view: EditorView, showCtxBadge = false): HTMLElement {
-    const row = activeDocument.createElement('div')
+    const row = activeDocument.createDiv()
     row.className = 'directive-checklist__row'
 
     row.addEventListener('mousedown', (e: MouseEvent) => {
@@ -903,7 +903,7 @@ class ChecklistWidget extends DirectiveWidget {
     })
 
     // Checkbox
-    const cb = activeDocument.createElement('input')
+    const cb = activeDocument.createEl('input')
     cb.type      = 'checkbox'
     cb.checked   = task.checked
     cb.className = 'directive-checklist__checkbox'
@@ -913,7 +913,7 @@ class ChecklistWidget extends DirectiveWidget {
     })
 
     // Task text
-    const textEl = activeDocument.createElement('span')
+    const textEl = activeDocument.createSpan()
     textEl.className = 'directive-checklist__text'
     if (task.checked) textEl.classList.add('directive-checklist__text--done')
     textEl.textContent = task.text
@@ -921,7 +921,7 @@ class ChecklistWidget extends DirectiveWidget {
 
     // Directive context badge (e.g. "Log") — shown when grouped by page
     if (showCtxBadge && task.directiveContext && task.directiveContext !== 'checklist') {
-      const badge = activeDocument.createElement('span')
+      const badge = activeDocument.createSpan()
       badge.className = 'directive-checklist__ctx-badge'
       const ctx = task.directiveLabel ?? task.directiveContext
       badge.textContent = ctx.charAt(0).toUpperCase() + ctx.slice(1)
@@ -929,17 +929,17 @@ class ChecklistWidget extends DirectiveWidget {
     }
 
     // Row action buttons (edit + jump) — hidden until row hover
-    const rowActions = activeDocument.createElement('span')
+    const rowActions = activeDocument.createSpan()
     rowActions.className = 'directive-checklist__row-actions'
 
-    const editBtn = activeDocument.createElement('button')
+    const editBtn = activeDocument.createEl('button')
     editBtn.className = 'clickable-icon directive-checklist__row-btn'
     editBtn.setAttribute('aria-label', 'Edit task')
     setIcon(editBtn, 'pencil')
     editBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     editBtn.addEventListener('click', () => this.makeEditable(textEl, task, wrap, view))
 
-    const jumpBtn = activeDocument.createElement('button')
+    const jumpBtn = activeDocument.createEl('button')
     jumpBtn.className = 'clickable-icon directive-checklist__row-btn'
     jumpBtn.setAttribute('aria-label', 'Jump to source')
     setIcon(jumpBtn, 'arrow-right')
@@ -996,7 +996,7 @@ class ChecklistWidget extends DirectiveWidget {
     bodyEl: HTMLElement,
     view: EditorView,
   ): void {
-    const input = activeDocument.createElement('input')
+    const input = activeDocument.createEl('input')
     input.type      = 'text'
     input.value     = task.text
     input.className = 'directive-checklist__edit-input'

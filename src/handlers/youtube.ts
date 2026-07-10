@@ -311,7 +311,6 @@ class YouTubeUrlModal extends Modal {
       .setName('URL or video ID')
       .addText(text => {
         this.input = text.inputEl
-        // eslint-disable-next-line obsidianmd/ui/sentence-case -- placeholder is a URL example, not prose
         text.setPlaceholder('https://youtu.be/dQw4w9WgXcQ')
         this.input.addEventListener('keydown', (e: KeyboardEvent) => {
           if (e.key === 'Enter') this.confirm()
@@ -370,7 +369,7 @@ class YouTubeWidget extends DirectiveWidget {
     const start      = parseInt(this.directive.attributes['start'] ?? '0', 10) || 0
     const timestamps = parseTimestamps(this.directive.body ?? '')
 
-    const wrap = activeDocument.createElement('div')
+    const wrap = activeDocument.createDiv()
     wrap.className = 'directive-widget directive-widget--youtube'
 
     // Required: click-to-edit
@@ -389,7 +388,7 @@ class YouTubeWidget extends DirectiveWidget {
 
     // Optional header label
     if (this.directive.label) {
-      const header = activeDocument.createElement('div')
+      const header = activeDocument.createDiv()
       header.className   = 'directive-youtube-header'
       header.textContent = this.directive.label
       wrap.appendChild(header)
@@ -397,7 +396,7 @@ class YouTubeWidget extends DirectiveWidget {
 
     // 16:9 responsive iframe wrapper
     const iframe = this.buildIframe(vid, start)
-    const embedWrap = activeDocument.createElement('div')
+    const embedWrap = activeDocument.createDiv()
     embedWrap.className = 'directive-youtube-embed'
     embedWrap.appendChild(iframe)
     // Stop iframe interactions from bubbling to the cursor-move handler.
@@ -436,7 +435,7 @@ class YouTubeWidget extends DirectiveWidget {
     })
     if (start > 0) params.set('start', String(start))
 
-    const iframe           = activeDocument.createElement('iframe')
+    const iframe           = activeDocument.createEl('iframe')
     iframe.src             = `https://www.youtube.com/embed/${vid}?${params}`
     iframe.className       = 'directive-youtube-iframe'
     iframe.allow           = [
@@ -454,9 +453,9 @@ class YouTubeWidget extends DirectiveWidget {
   // ── Transcript panel ───────────────────────────────────────────────────
 
   private buildTranscriptLoadingPanel(): HTMLElement {
-    const panel = activeDocument.createElement('div')
+    const panel = activeDocument.createDiv()
     panel.className = 'directive-youtube-transcript directive-youtube-transcript--loading'
-    const msg = activeDocument.createElement('span')
+    const msg = activeDocument.createSpan()
     msg.className   = 'directive-transcript-loading-msg'
     msg.textContent = 'Loading transcript…'
     panel.appendChild(msg)
@@ -464,11 +463,11 @@ class YouTubeWidget extends DirectiveWidget {
   }
 
   private buildTranscriptError(err: unknown): HTMLElement {
-    const panel = activeDocument.createElement('div')
+    const panel = activeDocument.createDiv()
     panel.className = 'directive-youtube-transcript directive-youtube-transcript--error'
-    const icon = activeDocument.createElement('span')
+    const icon = activeDocument.createSpan()
     icon.textContent = '⚠'
-    const msg = activeDocument.createElement('span')
+    const msg = activeDocument.createSpan()
     const detail = err instanceof Error ? err.message : String(err)
     msg.textContent = `Could not load transcript: ${detail}`
     panel.appendChild(icon)
@@ -482,18 +481,18 @@ class YouTubeWidget extends DirectiveWidget {
     iframe: HTMLIFrameElement,
     view: EditorView,
   ): HTMLElement {
-    const panel = activeDocument.createElement('div')
+    const panel = activeDocument.createDiv()
     panel.className = 'directive-youtube-transcript'
 
     // Header with "Save to note" button
-    const header = activeDocument.createElement('div')
+    const header = activeDocument.createDiv()
     header.className = 'directive-transcript-header'
 
-    const label = activeDocument.createElement('span')
+    const label = activeDocument.createSpan()
     label.className   = 'directive-transcript-label'
     label.textContent = 'Transcript'
 
-    const saveBtn = activeDocument.createElement('button')
+    const saveBtn = activeDocument.createEl('button')
     saveBtn.className   = 'directive-transcript-save-btn'
     saveBtn.textContent = 'Save to note'
     saveBtn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())
@@ -506,7 +505,7 @@ class YouTubeWidget extends DirectiveWidget {
     panel.appendChild(header)
 
     if (lines.length === 0) {
-      const empty = activeDocument.createElement('div')
+      const empty = activeDocument.createDiv()
       empty.className   = 'directive-transcript-empty'
       empty.textContent = 'No transcript available for this video.'
       panel.appendChild(empty)
@@ -514,7 +513,7 @@ class YouTubeWidget extends DirectiveWidget {
     }
 
     // Scrollable line list
-    const list = activeDocument.createElement('div')
+    const list = activeDocument.createDiv()
     list.className = 'directive-transcript-list'
 
     const rowEls: HTMLElement[] = []
@@ -524,14 +523,14 @@ class YouTubeWidget extends DirectiveWidget {
       const line = lines[i]
       if (!line) continue
 
-      const row = activeDocument.createElement('div')
+      const row = activeDocument.createDiv()
       row.className = 'directive-timestamp-row directive-transcript-row'
 
-      const ts = activeDocument.createElement('span')
+      const ts = activeDocument.createSpan()
       ts.className   = 'directive-timestamp'
       ts.textContent = formatTimestamp(line.time)
 
-      const txt = activeDocument.createElement('span')
+      const txt = activeDocument.createSpan()
       txt.className   = 'directive-timestamp-label'
       txt.textContent = line.text
 
@@ -593,7 +592,7 @@ class YouTubeWidget extends DirectiveWidget {
     vid: string,
     iframe: HTMLIFrameElement,
   ): HTMLElement {
-    const list = activeDocument.createElement('div')
+    const list = activeDocument.createDiv()
     list.className = 'directive-youtube-timestamps'
 
     const rowEls: HTMLElement[] = []
@@ -603,14 +602,14 @@ class YouTubeWidget extends DirectiveWidget {
       const entry = timestamps[i]
       if (!entry) continue
 
-      const row = activeDocument.createElement('div')
+      const row = activeDocument.createDiv()
       row.className = 'directive-timestamp-row'
 
-      const tsEl = activeDocument.createElement('span')
+      const tsEl = activeDocument.createSpan()
       tsEl.className   = 'directive-timestamp'
       tsEl.textContent = entry.raw
 
-      const lblEl = activeDocument.createElement('span')
+      const lblEl = activeDocument.createSpan()
       lblEl.className   = 'directive-timestamp-label'
       lblEl.textContent = entry.label
 
@@ -731,20 +730,20 @@ class YouTubeWidget extends DirectiveWidget {
   // ── Error state ────────────────────────────────────────────────────────
 
   private buildError(raw: string, view: EditorView): HTMLElement {
-    const row = activeDocument.createElement('div')
+    const row = activeDocument.createDiv()
     row.className = 'directive-widget--error'
 
-    const icon = activeDocument.createElement('span')
+    const icon = activeDocument.createSpan()
     icon.className   = 'directive-error-icon'
     icon.textContent = '⚠'
 
-    const msg = activeDocument.createElement('span')
+    const msg = activeDocument.createSpan()
     msg.className   = 'directive-error-msg'
     msg.textContent = raw.trim()
       ? `Could not parse YouTube video ID: "${raw}"`
       : 'Missing vid attribute'
 
-    const btn = activeDocument.createElement('button')
+    const btn = activeDocument.createEl('button')
     btn.className   = 'directive-youtube-set-url-btn'
     btn.textContent = 'Set URL'
     btn.addEventListener('mousedown', (e: MouseEvent) => e.stopPropagation())

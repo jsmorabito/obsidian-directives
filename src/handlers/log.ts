@@ -294,10 +294,10 @@ class LogActionsWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
-    const wrap = activeDocument.createElement('span')
+    const wrap = activeDocument.createSpan()
     wrap.className = 'directive-log-actions'
 
-    const dateInput = activeDocument.createElement('input')
+    const dateInput = activeDocument.createEl('input')
     dateInput.type = 'date'
     dateInput.className = 'directive-log-actions-date-input'
     dateInput.value = todayISO()
@@ -308,21 +308,21 @@ class LogActionsWidget extends WidgetType {
       dateInput.value = todayISO()
     })
 
-    const calBtn = activeDocument.createElement('button')
+    const calBtn = activeDocument.createEl('button')
     calBtn.className = 'clickable-icon directive-log-actions-btn'
     calBtn.setAttribute('aria-label', 'Pick date for new log entry')
     setIcon(calBtn, 'calendar')
     calBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     calBtn.addEventListener('click', () => dateInput.showPicker())
 
-    const newBtn = activeDocument.createElement('button')
+    const newBtn = activeDocument.createEl('button')
     newBtn.className = 'clickable-icon directive-log-actions-btn'
     newBtn.setAttribute('aria-label', 'Add log entry for today')
     setIcon(newBtn, 'plus')
     newBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
     newBtn.addEventListener('click', () => insertNewEntry(view, this.directive, this.settings))
 
-    const foldBtn = activeDocument.createElement('button')
+    const foldBtn = activeDocument.createEl('button')
     foldBtn.className = 'clickable-icon directive-log-actions-btn'
     // Sync initial icon to actual fold state so it's correct after a widget rebuild.
     const initiallyFolded = anyFolded(view, this.directive)
@@ -339,19 +339,19 @@ class LogActionsWidget extends WidgetType {
     // State (query + open) is persisted in searchStateMap across widget rebuilds.
     const savedSearch = searchStateMap.get(this.directive.from) ?? { query: '', open: false }
 
-    const searchWrap = activeDocument.createElement('div')
+    const searchWrap = activeDocument.createDiv()
     searchWrap.className = 'directive-log-search-wrap'
     if (savedSearch.open) {
       searchWrap.classList.add('is-open')
       wrap.classList.add('is-search-open')
     }
 
-    const searchIconEl = activeDocument.createElement('span')
+    const searchIconEl = activeDocument.createSpan()
     searchIconEl.className = 'directive-log-search-icon'
     setIcon(searchIconEl, 'search')
     searchWrap.appendChild(searchIconEl)
 
-    const searchInput = activeDocument.createElement('input')
+    const searchInput = activeDocument.createEl('input')
     searchInput.type = 'text'
     searchInput.placeholder = 'Search…'
     searchInput.className = 'directive-log-search-input'
@@ -377,7 +377,7 @@ class LogActionsWidget extends WidgetType {
     })
     searchWrap.appendChild(searchInput)
 
-    const searchBtn = activeDocument.createElement('button')
+    const searchBtn = activeDocument.createEl('button')
     searchBtn.className = 'clickable-icon directive-log-actions-btn'
     searchBtn.setAttribute('aria-label', 'Search log entries')
     setIcon(searchBtn, 'search')
@@ -395,7 +395,7 @@ class LogActionsWidget extends WidgetType {
       }
     })
 
-    const editBtn = activeDocument.createElement('button')
+    const editBtn = activeDocument.createEl('button')
     editBtn.className = 'clickable-icon directive-log-actions-btn'
     editBtn.setAttribute('aria-label', 'Edit this block')
     setIcon(editBtn, 'code-2')
@@ -429,7 +429,7 @@ class LogHintWidget extends WidgetType {
   eq(other: WidgetType): boolean { return other instanceof LogHintWidget }
 
   toDOM(): HTMLElement {
-    const el = activeDocument.createElement('span')
+    const el = activeDocument.createSpan()
     el.className = 'directive-log-hint'
     el.textContent = 'Press + to add your first entry'
     return el
@@ -444,7 +444,7 @@ class LogHintWidget extends WidgetType {
 
 class NeverRenderedWidget extends DirectiveWidget {
   toDOM(): HTMLElement {
-    return activeDocument.createElement('span')
+    return activeDocument.createSpan()
   }
 }
 

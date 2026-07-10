@@ -51,8 +51,6 @@ export class ViewLogPopover {
     this.el = activeDocument.body.createDiv({ cls: 'view-log-popover' })
     this.el.style.top = `${rect.bottom + 4}px`
     this.el.style.right = `${window.innerWidth - rect.right}px`
-    // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- width is computed at runtime
-    this.el.style.width = '400px'
 
     void this.build(this.el)
 
