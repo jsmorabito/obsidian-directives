@@ -7,7 +7,7 @@ import { createAudioHandler, disposeAllAudio } from './handlers/audio'
 import { createChordsHandler } from './handlers/chords'
 import { createTabHandler } from './handlers/tab'
 import { createYouTubeHandler } from './handlers/youtube'
-import { createLogHandler, groupLogByMonth } from './handlers/log'
+import { createLogHandler, groupLogByMonth, logSearchHighlightExtension } from './handlers/log'
 import { createChecklistHandler } from './handlers/checklist'
 import { createAggregatorHandler } from './handlers/aggregator'
 import { DirectivesSettingTab } from './ui/settings-tab'
@@ -89,6 +89,7 @@ export default class ObsidianDirectivesPlugin extends Plugin
     this.addHandler(createAggregatorHandler(this.app))
 
     this.registerEditorExtension(createDirectiveExtension(this.registry))
+    this.registerEditorExtension(logSearchHighlightExtension)
     this.registerEditorSuggest(new DirectiveSuggest(this.app, this.registry))
 
     // Populate the log-file cache on layout ready, then keep it current.

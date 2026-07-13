@@ -693,6 +693,12 @@
   height: 0;
 }
 
+.directive-log-search-match {
+  background-color: var(--text-highlight-bg);
+  color: var(--text-normal);
+  border-radius: 2px;
+}
+
 /* --------------------------------------------------------------------------
    Log widget
    -------------------------------------------------------------------------- */

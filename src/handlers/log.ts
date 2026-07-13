@@ -8,13 +8,15 @@
  */
 
 import { Notice, setIcon } from 'obsidian'
-import { EditorView, WidgetType } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
+import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view'
+import type { DecorationSet, ViewUpdate } from '@codemirror/view'
+import { EditorState, RangeSetBuilder, StateEffect } from '@codemirror/state'
 import { foldEffect, unfoldEffect, foldedRanges, foldService } from '@codemirror/language'
 
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
 import type { DirectivesSettings } from '../settings'
+import { directivesField } from '../core/parser'
 import {
   DATE_RE, MONTH_RE, extractDate, monthOf, todayISO, buildDateLine, buildMonthLine,
   splitLogTitle, isGroupedBody, locateLogInsertion, resolveMonthHeadingLevel, INDENT_UNIT,
@@ -213,6 +215,11 @@ export function insertNewEntry(
 // Fold helpers
 // ---------------------------------------------------------------------------
 
+/** Dispatched whenever a log search query changes, even when it doesn't
+ *  change any fold state — lets logSearchHighlightExtension know to rebuild
+ *  its match decorations without depending on an unrelated doc/fold change. */
+export const logSearchQueryEffect = StateEffect.define<null>()
+
 /**
  * Returns fold ranges for each date heading line inside the directive body,
  * resolved via the editor's foldService so ranges exactly match what
@@ -267,11 +274,29 @@ function anyFolded(view: EditorView, directive: ParsedDirective): boolean {
   return ranges.some(r => foldedFroms.has(r.from))
 }
 
+interface SearchSection {
+  foldRange: { from: number; to: number } | null
+  matches: boolean
+}
+
+function foldRangeAt(state: EditorState, lineFrom: number, lineTo: number): { from: number; to: number } | null {
+  for (const fn of state.facet(foldService)) {
+    const r = fn(state, lineFrom, lineTo)
+    if (r) return r
+  }
+  return null
+}
+
 /**
  * Fold/unfold entries based on a search query.
  * Entries whose date or content lines contain the query (case-insensitive)
- * are unfolded; non-matching entries are folded.
- * Pass an empty query to unfold all.
+ * are unfolded; non-matching entries are folded. Pass an empty query to
+ * unfold everything.
+ *
+ * Grouped bodies get two-tier filtering: a month folds only when NONE of
+ * its days match, and within an unfolded month each day still folds or
+ * unfolds individually based on its own content — so search narrows all
+ * the way down to the day, not just the month.
  */
 function applySearchFilter(
   view: EditorView,
@@ -285,49 +310,74 @@ function applySearchFilter(
   const bodyStart = openLine.to + 1
   const closeLine = doc.lineAt(directive.to)
 
-  // Build list of {dateLineFrom, dateLineTo, contentText, foldRange}
-  interface Section {
-    foldRange: { from: number; to: number } | null
-    matches: boolean
-  }
-
-  const sections: Section[] = []
-  let current: { from: number; to: number; lines: string[] } | null = null
-
   const bodyText = doc.sliceString(bodyStart, closeLine.from)
-  const entryRe = isGroupedBody(bodyText) ? MONTH_RE : DATE_RE
+  const grouped = isGroupedBody(bodyText)
 
-  for (let pos = bodyStart; pos < closeLine.from; ) {
-    const line = doc.lineAt(pos)
-    if (!/^[ \t]/.test(line.text) && entryRe.test(line.text.trimEnd())) {
-      if (current) {
-        let foldRange: { from: number; to: number } | null = null
-        for (const fn of state.facet(foldService)) {
-          const r = fn(state, doc.lineAt(current.from).from, doc.lineAt(current.from).to)
-          if (r) { foldRange = r; break }
-        }
-        sections.push({
-          foldRange,
-          matches: !q || current.lines.some(l => l.toLowerCase().includes(q)),
-        })
+  const sections: SearchSection[] = []
+
+  if (!grouped) {
+    let current: { from: number; lines: string[] } | null = null
+    const flushDay = (): void => {
+      if (!current) return
+      const line = doc.lineAt(current.from)
+      sections.push({
+        foldRange: foldRangeAt(state, line.from, line.to),
+        matches: !q || current.lines.some(l => l.toLowerCase().includes(q)),
+      })
+    }
+    for (let pos = bodyStart; pos < closeLine.from; ) {
+      const line = doc.lineAt(pos)
+      if (!/^[ \t]/.test(line.text) && DATE_RE.test(line.text.trimEnd())) {
+        flushDay()
+        current = { from: line.from, lines: [line.text] }
+      } else if (current) {
+        current.lines.push(line.text)
       }
-      current = { from: line.from, to: line.to, lines: [line.text] }
-    } else if (current) {
-      current.lines.push(line.text)
+      if (line.to + 1 > doc.length) break
+      pos = line.to + 1
     }
-    if (line.to + 1 > doc.length) break
-    pos = line.to + 1
-  }
-  if (current) {
-    let foldRange: { from: number; to: number } | null = null
-    for (const fn of state.facet(foldService)) {
-      const r = fn(state, doc.lineAt(current.from).from, doc.lineAt(current.from).to)
-      if (r) { foldRange = r; break }
+    flushDay()
+  } else {
+    let currentMonth: { from: number; dayMatches: boolean[] } | null = null
+    let currentDay: { from: number; lines: string[] } | null = null
+
+    const flushDay = (): void => {
+      if (!currentDay) return
+      const line = doc.lineAt(currentDay.from)
+      const matches = !q || currentDay.lines.some(l => l.toLowerCase().includes(q))
+      sections.push({ foldRange: foldRangeAt(state, line.from, line.to), matches })
+      currentMonth?.dayMatches.push(matches)
+      currentDay = null
     }
-    sections.push({
-      foldRange,
-      matches: !q || current.lines.some(l => l.toLowerCase().includes(q)),
-    })
+    const flushMonth = (): void => {
+      flushDay()
+      if (!currentMonth) return
+      const line = doc.lineAt(currentMonth.from)
+      sections.push({
+        foldRange: foldRangeAt(state, line.from, line.to),
+        matches: !q || currentMonth.dayMatches.some(Boolean),
+      })
+      currentMonth = null
+    }
+
+    for (let pos = bodyStart; pos < closeLine.from; ) {
+      const line = doc.lineAt(pos)
+      const topLevel = !/^[ \t]/.test(line.text)
+      const trimmed = line.text.trimEnd()
+
+      if (topLevel && MONTH_RE.test(trimmed)) {
+        flushMonth()
+        currentMonth = { from: line.from, dayMatches: [] }
+      } else if (DATE_RE.test(trimmed)) {
+        flushDay()
+        currentDay = { from: line.from, lines: [line.text] }
+      } else if (currentDay) {
+        currentDay.lines.push(line.text)
+      }
+      if (line.to + 1 > doc.length) break
+      pos = line.to + 1
+    }
+    flushMonth()
   }
 
   const folded = foldedRanges(state)
@@ -335,7 +385,7 @@ function applySearchFilter(
   const foldedFroms = new Set<number>()
   while (cursor.value !== null) { foldedFroms.add(cursor.from); cursor.next() }
 
-  const effects = []
+  const effects: StateEffect<unknown>[] = [logSearchQueryEffect.of(null)]
   for (const section of sections) {
     if (!section.foldRange) continue
     const isFolded = foldedFroms.has(section.foldRange.from)
@@ -345,7 +395,7 @@ function applySearchFilter(
       effects.push(unfoldEffect.of(section.foldRange))
     }
   }
-  if (effects.length) view.dispatch({ effects })
+  view.dispatch({ effects })
 }
 
 function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
@@ -370,6 +420,94 @@ function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
 interface SearchState { query: string; open: boolean }
 const searchStateMap = new Map<number, SearchState>()
 
+// ---------------------------------------------------------------------------
+// Search-match highlight — mirrors Ctrl+F: mark-decorates every occurrence
+// of the active search query within the currently visible (unfolded) body
+// of any :::log block that has one. Purely cosmetic — the underlying
+// Markdown is untouched, same as every other decoration in this plugin.
+// ---------------------------------------------------------------------------
+
+const searchHighlightMark = Decoration.mark({ class: 'directive-log-search-match' })
+
+/** True if `pos` falls inside any currently-folded range. */
+function posIsFolded(state: EditorState, pos: number): boolean {
+  const cursor = foldedRanges(state).iter()
+  while (cursor.value !== null) {
+    if (pos >= cursor.from && pos < cursor.to) return true
+    cursor.next()
+  }
+  return false
+}
+
+function buildSearchHighlights(view: EditorView): DecorationSet {
+  const directives = view.state.field(directivesField, false)
+  if (!directives || directives.length === 0) return Decoration.none
+
+  const logDirectives = directives
+    .filter(d => d.type === 'container' && d.name === 'log' && searchStateMap.get(d.from)?.query.trim())
+    .sort((a, b) => a.from - b.from)
+  if (logDirectives.length === 0) return Decoration.none
+
+  const doc = view.state.doc
+  const matches: { from: number; to: number }[] = []
+
+  for (const directive of logDirectives) {
+    const q = searchStateMap.get(directive.from)?.query.trim().toLowerCase()
+    if (!q) continue
+
+    const openLine = doc.lineAt(directive.from)
+    const bodyStart = openLine.to + 1
+    const bodyEnd = doc.lineAt(directive.to).from
+
+    for (const vr of view.visibleRanges) {
+      const from = Math.max(vr.from, bodyStart)
+      const to = Math.min(vr.to, bodyEnd)
+      if (from >= to) continue
+
+      const text = doc.sliceString(from, to).toLowerCase()
+      let idx = text.indexOf(q)
+      while (idx !== -1) {
+        const matchFrom = from + idx
+        const matchTo = matchFrom + q.length
+        if (!posIsFolded(view.state, matchFrom)) {
+          matches.push({ from: matchFrom, to: matchTo })
+        }
+        idx = text.indexOf(q, idx + 1)
+      }
+    }
+  }
+
+  matches.sort((a, b) => a.from - b.from || a.to - b.to)
+  const builder = new RangeSetBuilder<Decoration>()
+  for (const m of matches) {
+    if (m.from < m.to) builder.add(m.from, m.to, searchHighlightMark)
+  }
+  return builder.finish()
+}
+
+/** Editor-wide extension (registered once in main.ts) — not tied to a
+ *  single directive instance, since it must track every :::log block's
+ *  search state across the whole document. */
+export const logSearchHighlightExtension = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+
+    constructor(view: EditorView) {
+      this.decorations = buildSearchHighlights(view)
+    }
+
+    update(update: ViewUpdate): void {
+      if (
+        update.docChanged ||
+        update.viewportChanged ||
+        update.transactions.some(tr => tr.effects.some(e => e.is(logSearchQueryEffect)))
+      ) {
+        this.decorations = buildSearchHighlights(update.view)
+      }
+    }
+  },
+  { decorations: v => v.decorations },
+)
 
 // ---------------------------------------------------------------------------
 // LogActionsWidget — inline at end of the opening fence line
@@ -464,16 +602,16 @@ class LogActionsWidget extends WidgetType {
       e.stopPropagation()
       if (e.key === 'Escape') {
         searchInput.value = ''
+        searchStateMap.set(this.directive.from, { query: '', open: false })
         applySearchFilter(view, this.directive, '')
         searchWrap.classList.remove('is-open')
         wrap.classList.remove('is-search-open')
         searchInput.blur()
-        searchStateMap.set(this.directive.from, { query: '', open: false })
       }
     })
     searchInput.addEventListener('input', () => {
-      applySearchFilter(view, this.directive, searchInput.value)
       searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
+      applySearchFilter(view, this.directive, searchInput.value)
     })
     searchWrap.appendChild(searchInput)
 
@@ -490,8 +628,8 @@ class LogActionsWidget extends WidgetType {
         searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
       } else {
         searchInput.value = ''
-        applySearchFilter(view, this.directive, '')
         searchStateMap.set(this.directive.from, { query: '', open: false })
+        applySearchFilter(view, this.directive, '')
       }
     })
 

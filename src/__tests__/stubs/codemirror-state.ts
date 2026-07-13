@@ -22,3 +22,18 @@ export class RangeSetBuilder<T> {
   add(_from: number, _to: number, _value: T): this { return this }
   finish(): RangeSet<T> { return new RangeSet() }
 }
+export class StateEffect<T> {
+  constructor(readonly value: T, readonly type: unknown) {}
+  is(type: unknown): boolean { return this.type === type }
+  static define<T2 = unknown>(): {
+    of(value: T2): StateEffect<T2>
+    is(effect: unknown): effect is StateEffect<T2>
+  } {
+    const marker = {}
+    return {
+      of: (value: T2) => new StateEffect<T2>(value, marker),
+      is: (effect: unknown): effect is StateEffect<T2> =>
+        effect instanceof StateEffect && effect.is(marker),
+    }
+  }
+}
