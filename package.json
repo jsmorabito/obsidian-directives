@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-directives",
-	"version": "0.5.12",
+	"version": "0.5.13",
 	"description": "Composable, interactive directive blocks for the live editor — audio players, YouTube embeds, chord charts, and guitar tabs.",
 	"main": "main.js",
 	"type": "module",
