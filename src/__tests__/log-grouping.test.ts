@@ -182,6 +182,57 @@ describe('groupLogByMonth', () => {
     expect(result.reason).toMatch(/shallower/i)
   })
 
+  it('renders month headers in long format', () => {
+    const settings = makeSettings({ logDateHeadingLevel: 0, logMonthFormat: 'long' })
+    const body = '- 2026-07-13\n    - Work A'
+    const result = groupLogByMonth(body, settings)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.body).toContain('- July 2026')
+  })
+
+  it('renders month headers in short format', () => {
+    const settings = makeSettings({ logDateHeadingLevel: 0, logMonthFormat: 'short' })
+    const body = '- 2026-07-13\n    - Work A'
+    const result = groupLogByMonth(body, settings)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.body).toContain('- Jul 2026')
+  })
+
+  it('re-parses an existing long-format month header without corrupting entries', () => {
+    const settings = makeSettings({ logDateHeadingLevel: 0, logMonthFormat: 'long' })
+    const body = [
+      '- July 2026',
+      '    - 2026-07-13',
+      '        - Work A',
+      '    - 2026-07-09',
+      '        - Work B',
+    ].join('\n')
+    const first = groupLogByMonth(body, settings)
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    expect(first.body).toBe(`${body}\n`)
+    const second = groupLogByMonth(first.body, settings)
+    expect(second.ok).toBe(true)
+    if (!second.ok) return
+    expect(second.body).toBe(first.body)
+  })
+
+  it('appends into an existing month written in short format', () => {
+    const settings = makeSettings({ logDateHeadingLevel: 0, logMonthFormat: 'short' })
+    const content = [
+      ':::log',
+      '- Jul 2026',
+      '    - 2026-07-13',
+      '        - First',
+      ':::',
+    ].join('\n')
+    const result = insertNoteIntoLog(content, '2026-07-13', 'Second', settings)!
+    expect(result.content.indexOf('First')).toBeLessThan(result.content.indexOf('Second'))
+    expect(result.content.match(/^- Jul 2026$/m)).toHaveLength(1)
+  })
+
   it('preserves out-of-order entries without re-sorting', () => {
     const body = [
       '- 2026-06-30',

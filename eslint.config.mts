@@ -40,10 +40,16 @@ export default defineConfig(
 		},
 	},
 	// URLs aren't prose — sentence-case's heuristics otherwise want the
-	// scheme capitalized (e.g. "HTTPS://...").
+	// scheme capitalized (e.g. "HTTPS://..."). Month names are proper nouns
+	// (used as example text in the log month-format setting) and must stay
+	// capitalized too.
 	{
 		rules: {
-			'obsidianmd/ui/sentence-case': ['warn', { enforceCamelCaseLower: true, ignoreRegex: ['^\\w+:\\/\\/'] }],
+			'obsidianmd/ui/sentence-case': ['warn', {
+				enforceCamelCaseLower: true,
+				ignoreRegex: ['^\\w+:\\/\\/'],
+				ignoreWords: ['July', 'Jul'],
+			}],
 		},
 	},
 );

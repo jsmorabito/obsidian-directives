@@ -25,19 +25,52 @@ import type { DirectivesSettings } from '../settings'
 export const DATE_RE =
   /^[ \t]*(?:-|#{1,6})\s+(?:\[\[(?:[^\]|]*\/)?(\d{4}-\d{2}-\d{2})[^\]]*\]\]|(\d{4}-\d{2}-\d{2}))\s*$/
 
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+export const MONTH_NAMES_SHORT = MONTH_NAMES.map(m => m.slice(0, 3))
+
+/** Maps every recognized month name/abbreviation to its zero-padded number ("01"-"12"). */
+const MONTH_NAME_TO_NUM: Record<string, string> = {}
+MONTH_NAMES.forEach((name, i) => {
+  const num = String(i + 1).padStart(2, '0')
+  MONTH_NAME_TO_NUM[name] = num
+  MONTH_NAME_TO_NUM[MONTH_NAMES_SHORT[i] ?? ''] = num
+})
+
 /**
- * Matches a log month-group line — same shape as DATE_RE but a bare
- * YYYY-MM (no day, no wikilink support). Used to group day entries under
- * a shared month header via the "Clean up log" command.
+ * Matches a log month-group line — same shape as DATE_RE but a bare month,
+ * no wikilink support. Recognizes every display format buildMonthLine() can
+ * produce (ISO "2026-07", long "July 2026", short "Jul 2026") regardless of
+ * the current logMonthFormat setting, so changing the setting never orphans
+ * previously-written month headers.
+ *
+ * Capture groups:
+ *   1, 2 — ISO year, ISO month number
+ *   3, 4 — month name/abbreviation, year (long or short form)
  */
-export const MONTH_RE = /^[ \t]*(?:-|#{1,6})\s+(\d{4}-\d{2})\s*$/
+export const MONTH_RE = new RegExp(
+  `^[ \\t]*(?:-|#{1,6})\\s+(?:(\\d{4})-(\\d{2})|(${[...MONTH_NAMES, ...MONTH_NAMES_SHORT].join('|')}) (\\d{4}))\\s*$`,
+)
 
 export function extractDate(match: RegExpExecArray): string {
   return match[1] ?? match[2] ?? ''
 }
 
 export function extractMonth(match: RegExpExecArray): string {
-  return match[1] ?? ''
+  if (match[1] && match[2]) return `${match[1]}-${match[2]}`
+  if (match[3] && match[4]) return `${match[4]}-${MONTH_NAME_TO_NUM[match[3]]}`
+  return ''
+}
+
+/** Renders a canonical YYYY-MM string in the given display format. */
+export function formatMonthDisplay(monthStr: string, format: DirectivesSettings['logMonthFormat']): string {
+  if (format === 'iso') return monthStr
+  const [year, monthNum] = monthStr.split('-')
+  const idx = Number(monthNum) - 1
+  const name = (format === 'long' ? MONTH_NAMES : MONTH_NAMES_SHORT)[idx] ?? monthStr
+  return `${name} ${year}`
 }
 
 /** YYYY-MM slice of a YYYY-MM-DD date string. */
@@ -99,7 +132,8 @@ export function buildMonthLine(monthStr: string, settings: DirectivesSettings): 
       'No valid month heading level available — check the Month heading level setting.',
     )
   }
-  return level === 0 ? `- ${monthStr}` : `${'#'.repeat(level)} ${monthStr}`
+  const display = formatMonthDisplay(monthStr, settings.logMonthFormat)
+  return level === 0 ? `- ${display}` : `${'#'.repeat(level)} ${display}`
 }
 
 /**

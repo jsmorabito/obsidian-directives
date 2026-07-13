@@ -111,6 +111,26 @@ export class DirectivesSettingTab extends PluginSettingTab {
     monthLevelSetting.settingEl.toggle(this.plugin.settings.logDateHeadingLevel > 0)
 
     new Setting(containerEl)
+      .setName('Month format')
+      .setDesc(
+        'How month-group headers created by "Clean up log" are displayed. ' +
+        'Changing this only affects newly written month headers — ' +
+        're-run "Clean up log" to reformat existing ones.',
+      )
+      .addDropdown(drop =>
+        drop
+          .addOption('iso',   'Numeric — 2026-07')
+          .addOption('long',  'Long — July 2026')
+          .addOption('short', 'Short — Jul 2026')
+          .setValue(this.plugin.settings.logMonthFormat)
+          .onChange(async value => {
+            this.plugin.settings.logMonthFormat =
+              value as typeof this.plugin.settings.logMonthFormat
+            await this.plugin.saveSettings()
+          }),
+      )
+
+    new Setting(containerEl)
       .setName('Title heading level')
       .setDesc(
         'Insert a Markdown heading for "Log" at the top of the directive body ' +

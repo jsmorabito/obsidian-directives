@@ -14,6 +14,9 @@ export type ChordLayout = 'grid' | 'horizontal' | 'vertical' | 'text'
 /** Whether log dates render as plain text or as Obsidian [[wikilinks]]. */
 export type LogDateStyle = 'plain' | 'wikilink'
 
+/** How month-group headers created by "Clean up log" are displayed. */
+export type LogMonthFormat = 'iso' | 'long' | 'short'
+
 export interface DirectivesSettings {
   // ── Log handler ──────────────────────────────────────────────────────────
   /**
@@ -40,6 +43,17 @@ export interface DirectivesSettings {
    * a plain list item there.
    */
   logMonthHeadingLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+  /**
+   * Display format for month-group headers created by "Clean up log".
+   *   'iso'   — 2026-07
+   *   'long'  — July 2026
+   *   'short' — Jul 2026
+   * Applies to both list-item and heading-style months. Changing this only
+   * affects newly written month headers — re-run "Clean up log" to reformat
+   * existing ones.
+   */
+  logMonthFormat: LogMonthFormat
 
   /**
    * Heading level for the "Log" title inserted at the top of the directive body.
@@ -102,6 +116,7 @@ export const DEFAULT_SETTINGS: DirectivesSettings = {
   logDateFormat:        '{{date}}',
   logDateHeadingLevel:  6,
   logMonthHeadingLevel: 0,
+  logMonthFormat:       'iso',
   logTitleHeadingLevel: 0,
   logViewButton:        false,
   defaultBpm:         120,
