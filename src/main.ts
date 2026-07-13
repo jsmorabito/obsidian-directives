@@ -1,12 +1,13 @@
-import { MarkdownView, Plugin, TFile } from 'obsidian'
+import { Editor, EditorPosition, MarkdownView, Notice, Plugin, TFile } from 'obsidian'
 import { DirectiveRegistry } from './core/registry'
 import { createDirectiveExtension } from './core/decoration-engine'
 import { eventBusField } from './core/event-bus'
+import { parseDirectives } from './core/parser'
 import { createAudioHandler, disposeAllAudio } from './handlers/audio'
 import { createChordsHandler } from './handlers/chords'
 import { createTabHandler } from './handlers/tab'
 import { createYouTubeHandler } from './handlers/youtube'
-import { createLogHandler } from './handlers/log'
+import { createLogHandler, groupLogByMonth } from './handlers/log'
 import { createChecklistHandler } from './handlers/checklist'
 import { createAggregatorHandler } from './handlers/aggregator'
 import { DirectivesSettingTab } from './ui/settings-tab'
@@ -124,6 +125,27 @@ export default class ObsidianDirectivesPlugin extends Plugin
       name: 'Add activity to log',
       callback: () => openAddToLog('activity'),
     })
+
+    this.addCommand({
+      id: 'clean-up-log',
+      name: 'Clean up log',
+      editorCheckCallback: (checking: boolean, editor: Editor): boolean => {
+        const directive = this.findLogDirectiveAtCursor(editor)
+        if (!directive) return false
+        if (checking) return true
+
+        const result = groupLogByMonth(directive.body ?? '', this.settings)
+        if (!result.ok) {
+          new Notice(result.reason)
+          return true
+        }
+
+        editor.replaceRange(result.body, directive.bodyStart, directive.bodyEnd)
+        new Notice('Log cleaned up')
+        return true
+      },
+    })
+
     this.registerEvent(this.app.workspace.on('file-open', () => {
       this.closeLogPopover()
       void this.syncActiveLogButton()
@@ -156,6 +178,27 @@ export default class ObsidianDirectivesPlugin extends Plugin
     } catch {
       this.logFileCache.delete(file.path)
     }
+  }
+
+  /** Finds the :::log directive containing the editor cursor, if any, along
+   *  with its body's editor positions (for a direct `replaceRange`). */
+  private findLogDirectiveAtCursor(
+    editor: Editor,
+  ): { body: string | undefined; bodyStart: EditorPosition; bodyEnd: EditorPosition } | null {
+    const directives = parseDirectives(editor.getValue())
+    const cursorOffset = editor.posToOffset(editor.getCursor())
+
+    const directive = directives.find(d =>
+      d.type === 'container' && d.name === 'log' && cursorOffset >= d.from && cursorOffset <= d.to,
+    )
+    if (!directive) return null
+
+    const openLineNum = editor.offsetToPos(directive.from).line
+    const bodyStart = { line: openLineNum + 1, ch: 0 }
+    const bodyStartOffset = editor.posToOffset(bodyStart)
+    const bodyEnd = editor.offsetToPos(bodyStartOffset + (directive.body ?? '').length)
+
+    return { body: directive.body, bodyStart, bodyEnd }
   }
 
   onunload(): void {

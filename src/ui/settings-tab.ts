@@ -78,8 +78,37 @@ export class DirectivesSettingTab extends PluginSettingTab {
             this.plugin.settings.logDateHeadingLevel =
               Number(value) as typeof this.plugin.settings.logDateHeadingLevel
             await this.plugin.saveSettings()
+            monthLevelSetting.settingEl.toggle(this.plugin.settings.logDateHeadingLevel > 0)
           }),
       )
+
+    const monthLevelSetting = new Setting(containerEl)
+      .setName('Month heading level')
+      .setDesc(
+        'Heading level used for month-group lines created by "Clean up log" ' +
+        '(e.g. "2026-06"). Must be shallower than the date heading level above, ' +
+        'or native folding can\'t nest days under it. Choose "Automatic" to always ' +
+        'use one level shallower than the date heading level.',
+      )
+      .addDropdown(drop =>
+        drop
+          .addOption('0', 'Automatic  (one level above date)')
+          .addOption('1', 'H1  (#)')
+          .addOption('2', 'H2  (##)')
+          .addOption('3', 'H3  (###)')
+          .addOption('4', 'H4  (####)')
+          .addOption('5', 'H5  (#####)')
+          .addOption('6', 'H6  (######)')
+          .setValue(String(this.plugin.settings.logMonthHeadingLevel))
+          .onChange(async value => {
+            this.plugin.settings.logMonthHeadingLevel =
+              Number(value) as typeof this.plugin.settings.logMonthHeadingLevel
+            await this.plugin.saveSettings()
+          }),
+      )
+
+    // Only meaningful in heading mode — list-mode months are always a bullet.
+    monthLevelSetting.settingEl.toggle(this.plugin.settings.logDateHeadingLevel > 0)
 
     new Setting(containerEl)
       .setName('Title heading level')

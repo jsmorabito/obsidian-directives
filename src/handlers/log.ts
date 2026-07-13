@@ -7,7 +7,7 @@
  * line for "New entry" / date-picker buttons.
  */
 
-import { setIcon } from 'obsidian'
+import { Notice, setIcon } from 'obsidian'
 import { EditorView, WidgetType } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { foldEffect, unfoldEffect, foldedRanges, foldService } from '@codemirror/language'
@@ -15,7 +15,10 @@ import { foldEffect, unfoldEffect, foldedRanges, foldService } from '@codemirror
 import { DirectiveWidget } from '../types'
 import type { DirectiveHandler, ParsedDirective } from '../types'
 import type { DirectivesSettings } from '../settings'
-import { DATE_RE, extractDate, todayISO, buildDateLine } from '../core/utils'
+import {
+  DATE_RE, MONTH_RE, extractDate, monthOf, todayISO, buildDateLine, buildMonthLine,
+  splitLogTitle, isGroupedBody, locateLogInsertion, resolveMonthHeadingLevel, INDENT_UNIT,
+} from '../core/utils'
 
 // ---------------------------------------------------------------------------
 // Body parser
@@ -31,22 +34,127 @@ export interface LogEntry {
 export function parseLogBody(body: string): LogEntry[] {
   const entries: LogEntry[] = []
   let current: LogEntry | null = null
+  let currentIndent = 0
   let offset = 0
 
   for (const raw of body.split('\n')) {
-    const dateMatch = DATE_RE.exec(raw.trimEnd())
+    const trimmed = raw.trimEnd()
+    if (MONTH_RE.exec(trimmed)) {
+      // Month-group line — structural, not an entry. Doesn't close the
+      // current entry (that already ended when a boundary DATE_RE line
+      // was hit, or a month line only appears between entries anyway).
+      offset += raw.length + 1
+      continue
+    }
+    const dateMatch = DATE_RE.exec(trimmed)
     if (dateMatch) {
+      currentIndent = raw.length - raw.trimStart().length
       current = { date: extractDate(dateMatch), dateOffset: offset, lines: [], lineOffsets: [] }
       entries.push(current)
     } else if (current && raw.trim()) {
       current.lineOffsets.push(offset)
-      const stripped = raw.replace(/^(\t|  {1,4})/, '')
+      const relative = raw.slice(currentIndent)
+      const stripped = relative.replace(/^(\t|  {1,4})/, '')
       current.lines.push(stripped)
     }
     offset += raw.length + 1
   }
 
   return entries
+}
+
+// ---------------------------------------------------------------------------
+// groupLogByMonth — powers the "Clean up log" command
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the raw text of the first non-blank line that isn't a month line,
+ * a date line, or content under an open date entry — i.e. content that
+ * "Clean up log" can't safely place — or null if the body is entirely
+ * well-formed.
+ */
+function findUngroupableLine(bodyLines: string[]): string | null {
+  let insideEntry = false
+  for (const raw of bodyLines) {
+    if (!raw.trim()) continue
+    const trimmed = raw.trimEnd()
+    const topLevel = !/^[ \t]/.test(raw)
+    if (topLevel && MONTH_RE.test(trimmed)) { insideEntry = false; continue }
+    if (DATE_RE.test(trimmed)) { insideEntry = true; continue }
+    if (insideEntry) continue
+    return raw
+  }
+  return null
+}
+
+/**
+ * Reorganizes a :::log body so every day entry becomes a child of its
+ * month (e.g. "2026-07"), grouping the flat, newest-first list the widget
+ * normally produces into fold-able month sections. Manual, idempotent —
+ * running it again on an already-grouped body reproduces the same output.
+ * Never drops content: any line it can't place aborts the whole operation.
+ */
+export function groupLogByMonth(
+  body: string,
+  settings: DirectivesSettings,
+): { ok: true; body: string } | { ok: false; reason: string } {
+  if (resolveMonthHeadingLevel(settings) === null) {
+    return {
+      ok: false,
+      reason: settings.logMonthHeadingLevel > 0
+        ? 'Month grouping needs the Month heading level to be shallower than the Date heading level '
+          + '— fix it in Settings → Directives.'
+        : 'Month grouping needs the log date heading level to be 0 (list) or 2 or higher — '
+          + 'level 1 has no shallower heading level for month headers. Change it in Settings → Directives.',
+    }
+  }
+
+  const bodyLines = body.split('\n')
+  const { scanFrom, titleOffset } = splitLogTitle(bodyLines)
+  const titleLine = scanFrom === 1 ? (bodyLines[0] ?? '') : null
+  const restLines = bodyLines.slice(scanFrom)
+
+  const badLine = findUngroupableLine(restLines)
+  if (badLine !== null) {
+    return {
+      ok: false,
+      reason: `Log has a line that isn't part of a dated entry, so clean up was skipped: "${badLine.trim()}"`,
+    }
+  }
+
+  const entries = parseLogBody(body.slice(titleOffset))
+  if (entries.length === 0) {
+    return { ok: true, body }
+  }
+
+  const monthOrder: string[] = []
+  const buckets = new Map<string, LogEntry[]>()
+  for (const entry of entries) {
+    const m = monthOf(entry.date)
+    if (!buckets.has(m)) {
+      buckets.set(m, [])
+      monthOrder.push(m)
+    }
+    buckets.get(m)?.push(entry)
+  }
+
+  const headingMode = settings.logDateHeadingLevel > 0
+  const dayIndent = headingMode ? '' : INDENT_UNIT
+  const contentIndent = headingMode ? '' : INDENT_UNIT + INDENT_UNIT
+
+  const parts: string[] = []
+  for (const m of monthOrder) {
+    parts.push(buildMonthLine(m, settings))
+    for (const entry of buckets.get(m) ?? []) {
+      parts.push(dayIndent + buildDateLine(entry.date, settings))
+      for (const line of entry.lines) {
+        parts.push(contentIndent + line)
+      }
+    }
+  }
+
+  const newBody = (titleLine !== null ? `${titleLine}\n` : '') + parts.join('\n') + '\n'
+  return { ok: true, body: newBody }
 }
 
 // ---------------------------------------------------------------------------
@@ -61,56 +169,39 @@ export function insertNewEntry(
 ): void {
   const openingLine = view.state.doc.lineAt(directive.from)
   const bodyStart = openingLine.to + 1
-
   const body = directive.body ?? ''
-  const bodyLines = body.split('\n')
 
-  const firstBodyLine = bodyLines[0]?.trimEnd() ?? ''
-  const firstIsTitle = firstBodyLine.startsWith('#') && !DATE_RE.exec(firstBodyLine)
-  const titleOffset = firstIsTitle ? firstBodyLine.length + 1 : 0
+  const point = locateLogInsertion(body, dateISO, settings)
 
-  let insertOffset = titleOffset
-  let charCount = titleOffset
-  const scanFrom = firstIsTitle ? 1 : 0
-
-  for (let i = scanFrom; i < bodyLines.length; i++) {
-    const line = bodyLines[i] ?? ''
-    const match = DATE_RE.exec(line.trimEnd())
-
-    if (match) {
-      const existingDate = extractDate(match)
-
-      if (dateISO === existingDate) {
-        const contentStart = bodyStart + charCount + line.length + 1
-        const nextLine = bodyLines[i + 1] ?? ''
-        if (nextLine.trim().startsWith('-')) {
-          view.dispatch({ selection: { anchor: contentStart + nextLine.length } })
-        } else {
-          const sub = settings.logDateHeadingLevel > 0 ? '- ' : '    - '
-          view.dispatch({
-            changes: { from: contentStart, insert: sub + '\n' },
-            selection: { anchor: contentStart + sub.length },
-          })
-        }
-        view.focus()
-        return
-      }
-
-      if (dateISO > existingDate) break
+  if (point.found) {
+    const contentStart = bodyStart + point.dateLineStart + point.dateLineLength + 1
+    const nextLine = point.nextLineText
+    if (nextLine.trim().startsWith('-')) {
+      view.dispatch({ selection: { anchor: contentStart + nextLine.length } })
+    } else {
+      view.dispatch({
+        changes: { from: contentStart, insert: point.contentPrefix + '\n' },
+        selection: { anchor: contentStart + point.contentPrefix.length },
+      })
     }
-
-    charCount += line.length + 1
-    // Don't advance insertOffset over empty lines — this prevents blank lines
-    // between the title heading and the first inserted date entry.
-    if (line.trim()) insertOffset = charCount
+    view.focus()
+    return
   }
 
-  const subItem = settings.logDateHeadingLevel > 0 ? '- ' : '    - '
-  const toInsert = `${buildDateLine(dateISO, settings)}\n${subItem}\n`
-  const absPos = bodyStart + insertOffset
-  // Remove any blank lines between insertOffset and the next content/fence so
+  if (point.needsMonthLine && resolveMonthHeadingLevel(settings) === null) {
+    new Notice('Can\'t create a new month group — check the month heading level setting.')
+    return
+  }
+
+  const dateLineText = point.dateIndent + buildDateLine(dateISO, settings)
+  const toInsert = point.needsMonthLine
+    ? `${buildMonthLine(point.monthStr ?? monthOf(dateISO), settings)}\n${dateLineText}\n${point.contentPrefix}\n`
+    : `${dateLineText}\n${point.contentPrefix}\n`
+
+  const absPos = bodyStart + point.insertAt
+  // Remove any blank lines between insertAt and the next content/fence so
   // they don't appear below the newly inserted entry.
-  const blankCharsAfter = charCount - insertOffset
+  const blankCharsAfter = point.scanEnd - point.insertAt
   view.dispatch({
     changes: { from: absPos, to: absPos + blankCharsAfter, insert: toInsert },
     selection: { anchor: absPos + toInsert.length - 1 },
@@ -139,9 +230,15 @@ function headingFoldRanges(
 
   const ranges: { from: number; to: number }[] = []
 
+  // Once grouped, fold at month granularity (folding a month natively hides
+  // all its days) rather than day granularity — otherwise "collapse all"
+  // would defeat the point of grouping.
+  const bodyText = doc.sliceString(bodyStart, closeLine.from)
+  const entryRe = isGroupedBody(bodyText) ? MONTH_RE : DATE_RE
+
   for (let pos = bodyStart; pos < closeLine.from; ) {
     const line = doc.lineAt(pos)
-    if (DATE_RE.exec(line.text)) {
+    if (!/^[ \t]/.test(line.text) && entryRe.test(line.text.trimEnd())) {
       // Ask each registered fold service for the canonical range at this line.
       for (const fn of state.facet(foldService)) {
         const r = fn(state, line.from, line.to)
@@ -197,9 +294,12 @@ function applySearchFilter(
   const sections: Section[] = []
   let current: { from: number; to: number; lines: string[] } | null = null
 
+  const bodyText = doc.sliceString(bodyStart, closeLine.from)
+  const entryRe = isGroupedBody(bodyText) ? MONTH_RE : DATE_RE
+
   for (let pos = bodyStart; pos < closeLine.from; ) {
     const line = doc.lineAt(pos)
-    if (DATE_RE.exec(line.text)) {
+    if (!/^[ \t]/.test(line.text) && entryRe.test(line.text.trimEnd())) {
       if (current) {
         let foldRange: { from: number; to: number } | null = null
         for (const fn of state.facet(foldService)) {

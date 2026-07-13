@@ -31,6 +31,17 @@ export interface DirectivesSettings {
   logDateHeadingLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6
 
   /**
+   * Heading level used for month-group lines created by "Clean up log"
+   * (e.g. "2026-06"), when logDateHeadingLevel is in heading mode.
+   *   0     — automatic: one level shallower than logDateHeadingLevel
+   *   1–6   — explicit heading level. Must be shallower than
+   *           logDateHeadingLevel or month grouping is disabled.
+   * Ignored when logDateHeadingLevel is 0 (list mode) — months are always
+   * a plain list item there.
+   */
+  logMonthHeadingLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+  /**
    * Heading level for the "Log" title inserted at the top of the directive body.
    *   0 — no heading; the widget shows "Log" in its own header bar only
    *   1–6 — inserts a Markdown heading (# … ######) so it appears in the Outline
@@ -90,6 +101,7 @@ export const DEFAULT_SETTINGS: DirectivesSettings = {
   logDateStyle:         'plain',
   logDateFormat:        '{{date}}',
   logDateHeadingLevel:  6,
+  logMonthHeadingLevel: 0,
   logTitleHeadingLevel: 0,
   logViewButton:        false,
   defaultBpm:         120,

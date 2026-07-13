@@ -18,7 +18,9 @@ import {
   setIcon,
 } from 'obsidian'
 import type { DirectivesSettings } from '../settings'
-import { DATE_RE, extractDate, todayISO, buildDateLine } from '../core/utils'
+import {
+  todayISO, buildDateLine, buildMonthLine, monthOf, locateLogInsertion, resolveMonthHeadingLevel,
+} from '../core/utils'
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -56,75 +58,29 @@ export function insertNoteIntoLog(
   if (!closeMatch) return null
 
   const body = content.slice(afterOpen, afterOpen + closeMatch.index)
-  const bodyLines = body.split('\n')
+  const point = locateLogInsertion(body, dateISO, settings)
 
-  // Skip title heading (e.g. "## Log").
-  const firstBodyLine = bodyLines[0]?.trimEnd() ?? ''
-  const firstIsTitle = firstBodyLine.startsWith('#') && !DATE_RE.exec(firstBodyLine)
-  const titleOffset = firstIsTitle ? firstBodyLine.length + 1 : 0
-  const scanFrom = firstIsTitle ? 1 : 0
-
-  const subPrefix = settings.logDateHeadingLevel > 0 ? '- ' : '    - '
-
-  // Walk lines to find the target date or the right insertion point.
-  let charCount = titleOffset
-
-  for (let i = scanFrom; i < bodyLines.length; i++) {
-    const line = bodyLines[i] ?? ''
-    const match = DATE_RE.exec(line.trimEnd())
-
-    if (match) {
-      const existing = extractDate(match)
-
-      if (existing === dateISO) {
-        // Found the target date — scan forward to the end of its content lines,
-        // then append the note just before the next date entry (or end of body).
-        let appendOffset = charCount + line.length + 1  // start of next line after date heading
-
-        for (let j = i + 1; j < bodyLines.length; j++) {
-          const nextLine = bodyLines[j] ?? ''
-          if (DATE_RE.exec(nextLine.trimEnd())) break  // hit next date — stop
-          if (nextLine.trim()) {
-            appendOffset = charCount + line.length + 1
-            // Advance appendOffset past all content lines up to j.
-            let c = charCount + line.length + 1
-            for (let k = i + 1; k <= j; k++) {
-              c += (bodyLines[k]?.length ?? 0) + 1
-            }
-            appendOffset = c
-          }
-        }
-
-        const absAppend = afterOpen + appendOffset
-        const toInsert = `${subPrefix}${noteText}\n`
-        return {
-          content: content.slice(0, absAppend) + toInsert + content.slice(absAppend),
-          entryOffset: absAppend + subPrefix.length,
-        }
-      }
-
-      if (dateISO > existing) {
-        // New date is newer — insert a full new entry before this one.
-        const absInsert = afterOpen + charCount
-        const dateLine = `${buildDateLine(dateISO, settings)}\n`
-        const toInsert = `${dateLine}${subPrefix}${noteText}\n`
-        return {
-          content: content.slice(0, absInsert) + toInsert + content.slice(absInsert),
-          entryOffset: absInsert + dateLine.length + subPrefix.length,
-        }
-      }
+  if (point.found) {
+    // Append the note just before the next date entry (or end of body).
+    const absAppend = afterOpen + point.entryEnd
+    const toInsert = `${point.contentPrefix}${noteText}\n`
+    return {
+      content: content.slice(0, absAppend) + toInsert + content.slice(absAppend),
+      entryOffset: absAppend + point.contentPrefix.length,
     }
-
-    charCount += line.length + 1
   }
 
-  // Date is older than all existing entries — append at end of entries.
-  const absInsert = afterOpen + charCount
-  const dateLine = `${buildDateLine(dateISO, settings)}\n`
-  const toInsert = `${dateLine}${subPrefix}${noteText}\n`
+  if (point.needsMonthLine && resolveMonthHeadingLevel(settings) === null) return null
+
+  const dateLineText = point.dateIndent + buildDateLine(dateISO, settings)
+  const prefix = point.needsMonthLine
+    ? `${buildMonthLine(point.monthStr ?? monthOf(dateISO), settings)}\n${dateLineText}\n`
+    : `${dateLineText}\n`
+  const absInsert = afterOpen + point.insertAt
+  const toInsert = `${prefix}${point.contentPrefix}${noteText}\n`
   return {
     content: content.slice(0, absInsert) + toInsert + content.slice(absInsert),
-    entryOffset: absInsert + dateLine.length + subPrefix.length,
+    entryOffset: absInsert + prefix.length + point.contentPrefix.length,
   }
 }
 
