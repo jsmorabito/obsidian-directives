@@ -5,5 +5,5 @@
 	"description": "Composable, interactive directive blocks for the live editor — audio players, YouTube embeds, chord charts, and guitar tabs.",
 	"author": "John",
 	"isDesktopOnly": true,
-	"version": "0.5.13"
+	"version": "0.5.14"
 }
