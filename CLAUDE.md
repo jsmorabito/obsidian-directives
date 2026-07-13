@@ -216,3 +216,12 @@ from the settings tab take effect on the next widget render without a reload.
   time events natively.
 - **Chord database** — ~45 chords covering common keys.  Custom chord definitions
   via the directive body are not yet supported.
+- **Log search bar isn't sticky** — the find/prev/next controls live in the
+  `LogActionsWidget` at the end of the `:::log` opening fence line (see
+  `src/handlers/log.ts`).  `jumpToLogMatch()` scrolls a match into view via
+  `EditorView.scrollIntoView`, but the search bar itself scrolls away with the
+  fence line, so on a long log you have to scroll back up to reach Previous/Next
+  or Escape after jumping to a distant match.  Fixing this needs the action bar
+  (or at least the search controls) to be a `position: sticky` element, which
+  the current `Decoration.widget` placement doesn't support — would need a
+  layout change to the fold/header widget split in `decoration-engine.ts`.

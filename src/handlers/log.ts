@@ -417,17 +417,20 @@ function toggleFoldAll(view: EditorView, directive: ParsedDirective): boolean {
 // Search state — persisted across widget rebuilds keyed by directive position
 // ---------------------------------------------------------------------------
 
-interface SearchState { query: string; open: boolean }
+interface MatchRange { from: number; to: number }
+interface SearchState { query: string; open: boolean; activeMatch: MatchRange | null }
 const searchStateMap = new Map<number, SearchState>()
 
 // ---------------------------------------------------------------------------
 // Search-match highlight — mirrors Ctrl+F: mark-decorates every occurrence
 // of the active search query within the currently visible (unfolded) body
-// of any :::log block that has one. Purely cosmetic — the underlying
-// Markdown is untouched, same as every other decoration in this plugin.
+// of any :::log block that has one, with the current match (set via the
+// previous/next buttons) styled distinctly. Purely cosmetic — the
+// underlying Markdown is untouched, same as every other decoration here.
 // ---------------------------------------------------------------------------
 
 const searchHighlightMark = Decoration.mark({ class: 'directive-log-search-match' })
+const activeSearchHighlightMark = Decoration.mark({ class: 'directive-log-search-match directive-log-search-match--active' })
 
 /** True if `pos` falls inside any currently-folded range. */
 function posIsFolded(state: EditorState, pos: number): boolean {
@@ -437,6 +440,37 @@ function posIsFolded(state: EditorState, pos: number): boolean {
     cursor.next()
   }
   return false
+}
+
+/** Every case-insensitive occurrence of `query` in `text`, offset by `base`. */
+function scanTextForMatches(text: string, query: string, base: number): MatchRange[] {
+  const matches: MatchRange[] = []
+  const haystack = text.toLowerCase()
+  let idx = haystack.indexOf(query)
+  while (idx !== -1) {
+    matches.push({ from: base + idx, to: base + idx + query.length })
+    idx = haystack.indexOf(query, idx + 1)
+  }
+  return matches
+}
+
+/**
+ * Every visible (non-folded) match for `directive`'s current query across
+ * its whole body — used for previous/next navigation, which may need to
+ * jump to a match outside the current viewport.
+ */
+function findAllLogMatches(view: EditorView, directive: ParsedDirective, query: string): MatchRange[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+
+  const doc = view.state.doc
+  const openLine = doc.lineAt(directive.from)
+  const bodyStart = openLine.to + 1
+  const bodyEnd = doc.lineAt(directive.to).from
+  if (bodyStart >= bodyEnd) return []
+
+  return scanTextForMatches(doc.sliceString(bodyStart, bodyEnd), q, bodyStart)
+    .filter(m => !posIsFolded(view.state, m.from))
 }
 
 function buildSearchHighlights(view: EditorView): DecorationSet {
@@ -449,10 +483,11 @@ function buildSearchHighlights(view: EditorView): DecorationSet {
   if (logDirectives.length === 0) return Decoration.none
 
   const doc = view.state.doc
-  const matches: { from: number; to: number }[] = []
+  const matches: MatchRange[] = []
 
   for (const directive of logDirectives) {
-    const q = searchStateMap.get(directive.from)?.query.trim().toLowerCase()
+    const search = searchStateMap.get(directive.from)
+    const q = search?.query.trim().toLowerCase()
     if (!q) continue
 
     const openLine = doc.lineAt(directive.from)
@@ -464,15 +499,8 @@ function buildSearchHighlights(view: EditorView): DecorationSet {
       const to = Math.min(vr.to, bodyEnd)
       if (from >= to) continue
 
-      const text = doc.sliceString(from, to).toLowerCase()
-      let idx = text.indexOf(q)
-      while (idx !== -1) {
-        const matchFrom = from + idx
-        const matchTo = matchFrom + q.length
-        if (!posIsFolded(view.state, matchFrom)) {
-          matches.push({ from: matchFrom, to: matchTo })
-        }
-        idx = text.indexOf(q, idx + 1)
+      for (const m of scanTextForMatches(doc.sliceString(from, to), q, from)) {
+        if (!posIsFolded(view.state, m.from)) matches.push(m)
       }
     }
   }
@@ -480,7 +508,11 @@ function buildSearchHighlights(view: EditorView): DecorationSet {
   matches.sort((a, b) => a.from - b.from || a.to - b.to)
   const builder = new RangeSetBuilder<Decoration>()
   for (const m of matches) {
-    if (m.from < m.to) builder.add(m.from, m.to, searchHighlightMark)
+    if (m.from >= m.to) continue
+    const isActive = [...searchStateMap.values()].some(
+      s => s.activeMatch && s.activeMatch.from === m.from && s.activeMatch.to === m.to,
+    )
+    builder.add(m.from, m.to, isActive ? activeSearchHighlightMark : searchHighlightMark)
   }
   return builder.finish()
 }
@@ -509,6 +541,31 @@ export const logSearchHighlightExtension = ViewPlugin.fromClass(
   { decorations: v => v.decorations },
 )
 
+/**
+ * Moves to the next (direction: 1) or previous (direction: -1) search
+ * match, wrapping around, and scrolls it into view. No-ops if there's no
+ * active query or no matches.
+ */
+function jumpToLogMatch(view: EditorView, directive: ParsedDirective, direction: 1 | -1): void {
+  const search = searchStateMap.get(directive.from)
+  if (!search?.query.trim()) return
+
+  const allMatches = findAllLogMatches(view, directive, search.query)
+  if (allMatches.length === 0) return
+
+  const currentIndex = search.activeMatch
+    ? allMatches.findIndex(m => m.from === search.activeMatch!.from && m.to === search.activeMatch!.to)
+    : -1
+  const nextIndex = (currentIndex + direction + allMatches.length) % allMatches.length
+  const target = allMatches[nextIndex]
+  if (!target) return
+
+  searchStateMap.set(directive.from, { ...search, activeMatch: target })
+  view.dispatch({
+    effects: [EditorView.scrollIntoView(target.from, { y: 'center' }), logSearchQueryEffect.of(null)],
+  })
+}
+
 // ---------------------------------------------------------------------------
 // LogActionsWidget — inline at end of the opening fence line
 // ---------------------------------------------------------------------------
@@ -528,7 +585,9 @@ class LogActionsWidget extends WidgetType {
     // Also re-render if search state changed so the open/closed class is correct.
     const state = searchStateMap.get(this.directive.from)
     const otherState = searchStateMap.get(other.directive.from)
-    return state?.open === otherState?.open && state?.query === otherState?.query
+    return state?.open === otherState?.open
+      && state?.query === otherState?.query
+      && state?.activeMatch?.from === otherState?.activeMatch?.from
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -575,7 +634,7 @@ class LogActionsWidget extends WidgetType {
 
     // Search — button always visible, container slides open beside it.
     // State (query + open) is persisted in searchStateMap across widget rebuilds.
-    const savedSearch = searchStateMap.get(this.directive.from) ?? { query: '', open: false }
+    const savedSearch = searchStateMap.get(this.directive.from) ?? { query: '', open: false, activeMatch: null }
 
     const searchWrap = activeDocument.createElement('div')
     searchWrap.className = 'directive-log-search-wrap'
@@ -591,7 +650,7 @@ class LogActionsWidget extends WidgetType {
 
     const searchInput = activeDocument.createElement('input')
     searchInput.type = 'text'
-    searchInput.placeholder = 'Search…'
+    searchInput.placeholder = 'Find…'
     searchInput.className = 'directive-log-search-input'
     if (savedSearch.query) {
       searchInput.value = savedSearch.query
@@ -602,18 +661,37 @@ class LogActionsWidget extends WidgetType {
       e.stopPropagation()
       if (e.key === 'Escape') {
         searchInput.value = ''
-        searchStateMap.set(this.directive.from, { query: '', open: false })
+        searchStateMap.set(this.directive.from, { query: '', open: false, activeMatch: null })
         applySearchFilter(view, this.directive, '')
         searchWrap.classList.remove('is-open')
         wrap.classList.remove('is-search-open')
         searchInput.blur()
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        jumpToLogMatch(view, this.directive, e.shiftKey ? -1 : 1)
       }
     })
     searchInput.addEventListener('input', () => {
-      searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
+      searchStateMap.set(this.directive.from, { query: searchInput.value, open: true, activeMatch: null })
       applySearchFilter(view, this.directive, searchInput.value)
     })
     searchWrap.appendChild(searchInput)
+
+    const prevMatchBtn = activeDocument.createElement('button')
+    prevMatchBtn.className = 'clickable-icon directive-log-search-nav-btn'
+    prevMatchBtn.setAttribute('aria-label', 'Previous match')
+    setIcon(prevMatchBtn, 'arrow-up')
+    prevMatchBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    prevMatchBtn.addEventListener('click', () => jumpToLogMatch(view, this.directive, -1))
+    searchWrap.appendChild(prevMatchBtn)
+
+    const nextMatchBtn = activeDocument.createElement('button')
+    nextMatchBtn.className = 'clickable-icon directive-log-search-nav-btn'
+    nextMatchBtn.setAttribute('aria-label', 'Next match')
+    setIcon(nextMatchBtn, 'arrow-down')
+    nextMatchBtn.addEventListener('mousedown', (e: MouseEvent) => { e.stopPropagation(); e.preventDefault() })
+    nextMatchBtn.addEventListener('click', () => jumpToLogMatch(view, this.directive, 1))
+    searchWrap.appendChild(nextMatchBtn)
 
     const searchBtn = activeDocument.createElement('button')
     searchBtn.className = 'clickable-icon directive-log-actions-btn'
@@ -625,10 +703,10 @@ class LogActionsWidget extends WidgetType {
       wrap.classList.toggle('is-search-open', isOpen)
       if (isOpen) {
         searchInput.focus()
-        searchStateMap.set(this.directive.from, { query: searchInput.value, open: true })
+        searchStateMap.set(this.directive.from, { query: searchInput.value, open: true, activeMatch: savedSearch.activeMatch })
       } else {
         searchInput.value = ''
-        searchStateMap.set(this.directive.from, { query: '', open: false })
+        searchStateMap.set(this.directive.from, { query: '', open: false, activeMatch: null })
         applySearchFilter(view, this.directive, '')
       }
     })

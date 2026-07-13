@@ -699,6 +699,25 @@
   border-radius: 2px;
 }
 
+.directive-log-search-match--active {
+  background-color: var(--text-selection);
+}
+
+.directive-log-search-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--size-2-1);
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+}
+
+.directive-log-search-nav-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* --------------------------------------------------------------------------
    Log widget
    -------------------------------------------------------------------------- */
