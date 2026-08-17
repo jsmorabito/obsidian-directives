@@ -50,6 +50,14 @@ export class DirectiveSuggest extends EditorSuggest<DirectiveSuggestionItem> {
     const match = TRIGGER_RE.exec(lineBefore)
     if (!match) return null
 
+    // Only trigger in empty space — start of line or after whitespace — same
+    // convention as Obsidian's slash command menu.  A colon immediately after
+    // other text (e.g. "foo:bar") must not open the menu.
+    const charBeforeMatch = lineBefore[match.index - 1]
+    if (match.index > 0 && charBeforeMatch !== undefined && !/\s/.test(charBeforeMatch)) {
+      return null
+    }
+
     return {
       start: { line: cursor.line, ch: cursor.ch - match[0].length },
       end: cursor,
